@@ -4,7 +4,35 @@ import math
 import io
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+import streamlit as st
 
+# --- PERSONALIZACIÓN DE ESTÉTICA (CSS) ---
+st.markdown("""
+    <style>
+    /* Cambiar el color de fondo principal */
+    .stApp {
+        background-color: #f8f9fa;
+    }
+    
+    /* Personalizar la barra lateral */
+    [data-testid="stSidebar"] {
+        background-color: #e9ecef;
+    }
+
+    /* Estilo de los botones principales */
+    .stButton>button {
+        background-color: #1f3864;
+        color: white;
+        border-radius: 6px;
+        font-weight: bold;
+        width: 100%;
+    }
+    .stButton>button:hover {
+        background-color: #2e75b6;
+        color: white;
+    }
+    </style>
+""", unsafe_allow_html=True)
 # --- TUS FUNCIONES ORIGINALES ---
 G = 9.81  # m/s2
 L_STD = [1.83, 2.44, 3.05, 3.66, 4.88, 6.10]
