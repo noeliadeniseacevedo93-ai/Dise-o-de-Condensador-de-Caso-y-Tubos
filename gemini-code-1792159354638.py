@@ -66,6 +66,26 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# --- BASE DE DATOS DE COMPUESTOS PREDEFINIDOS ---
+FLUIDOS_DB = {
+    "Vapor de agua (Saturado)": {
+        "wh": 720.0, "p": 300.0, "lam": 2163.5, "tsat": 133.5,
+        "rho_v": 1.651, "mu_v": 0.0134, "k_v": 0.0275, "cp_v": 2.17,
+        "rho_l": 943.0, "mu_l": 0.232, "k_l": 0.685, "cp_l": 4.25
+    },
+    "Amoníaco (R-717)": {
+        "wh": 650.0, "p": 1167.0, "lam": 1155.0, "tsat": 30.0,
+        "rho_v": 6.82, "mu_v": 0.0110, "k_v": 0.0220, "cp_v": 2.80,
+        "rho_l": 608.0, "mu_l": 0.145, "k_l": 0.480, "cp_l": 4.60
+    },
+    "Etanol": {
+        "wh": 800.0, "p": 100.0, "lam": 840.0, "tsat": 78.3,
+        "rho_v": 1.59, "mu_v": 0.0105, "k_v": 0.0180, "cp_v": 1.50,
+        "rho_l": 757.0, "mu_l": 0.410, "k_l": 0.168, "cp_l": 2.84
+    }
+}
+
+
 # --- MOTOR DE CÁLCULO TÉRMICO E HIDRÁULICO TEMA ---
 G = 9.81
 L_STD = [1.83, 2.44, 3.05, 3.66, 4.88, 6.10]
@@ -298,7 +318,7 @@ def exportar_hoja_tema_bytes(d, r, log, warns):
 
     titulo("2. CONDICIONES DE OPERACIÓN Y PROCESO")
     encabezado("Parámetro", "Lado casco", "Lado tubos", "Unidad")
-    fila("Fluido", "Vapor de agua", "Agua de enfriamiento", "-")
+    fila("Fluido", fluido_v, "Agua de enfriamiento", "-")
     fila("Caudal másico", round(h["Wh"], 2), round(c["Wc"], 2), "kg/h", fmt="#,##0.00")
     fila("Temperatura de entrada", h["T1"], c["t1"], "°C", fmt="0.0")
     fila("Temperatura de salida", h["T2"], c["t2"], "°C", fmt="0.0")
@@ -435,16 +455,21 @@ with tab_in1:
 
 with tab_in2:
     st.markdown("### Condiciones del Vapor (Lado Casco)")
+    
+    # Selector de compuesto predefinido
+    compuesto_sel = st.selectbox("Seleccionar compuesto / fluido condensante predefinido:", list(FLUIDOS_DB.keys()))
+    props_def = FLUIDOS_DB[compuesto_sel]
+
     c1, c2, c3, c4 = st.columns(4)
-    with c1: fluido_v = st.text_input("Fluido que condensa", value="Vapor de agua")
-    with c2: wh = st.number_input("Caudal de vapor [kg/h]", value=720.0, step=10.0)
-    with c3: p_oper_s = st.number_input("Presión de operación [kPa abs]", value=300.0, step=10.0)
-    with c4: lam = st.number_input("Calor latente [kJ/kg]", value=2163.5, step=10.0)
+    with c1: fluido_v = st.text_input("Fluido que condensa", value=compuesto_sel)
+    with c2: wh = st.number_input("Caudal de vapor [kg/h]", value=props_def["wh"], step=10.0)
+    with c3: p_oper_s = st.number_input("Presión de operación [kPa abs]", value=props_def["p"], step=10.0)
+    with c4: lam = st.number_input("Calor latente [kJ/kg]", value=props_def["lam"], step=10.0)
 
     c5, c6, c7 = st.columns(3)
-    with c5: tsat = st.number_input("Temperatura de saturación [°C]", value=133.5, step=0.1)
-    with c6: t1_hot = st.number_input("Temperatura de entrada [°C]", value=133.5, step=0.1)
-    with c7: t2_hot = st.number_input("Temperatura de salida del condensado [°C]", value=133.5, step=0.1)
+    with c5: tsat = st.number_input("Temperatura de saturación [°C]", value=props_def["tsat"], step=0.1)
+    with c6: t1_hot = st.number_input("Temperatura de entrada [°C]", value=props_def["tsat"], step=0.1)
+    with c7: t2_hot = st.number_input("Temperatura de salida del condensado [°C]", value=props_def["tsat"], step=0.1)
 
     c8, c9 = st.columns(2)
     with c8: rd_hot = st.number_input("Factor de ensuciamiento requerido [m²·K/W]", value=0.000088, format="%.6f")
@@ -452,17 +477,17 @@ with tab_in2:
 
     st.markdown("#### Propiedades del Vapor y Líquido")
     p1, p2, p3, p4 = st.columns(4)
-    with p1: rho_v = st.number_input("Densidad vapor [kg/m³]", value=1.651)
-    with p2: mu_v = st.number_input("Viscosidad vapor [mPa·s]", value=0.0134)
-    with p3: k_v = st.number_input("Conductividad vapor [W/m·K]", value=0.0275)
-    with p4: cp_v = st.number_input("Calor específico vapor [kJ/kg·K]", value=2.17)
+    with p1: rho_v = st.number_input("Densidad vapor [kg/m³]", value=props_def["rho_v"])
+    with p2: mu_v = st.number_input("Viscosidad vapor [mPa·s]", value=props_def["mu_v"])
+    with p3: k_v = st.number_input("Conductividad vapor [W/m·K]", value=props_def["k_v"])
+    with p4: cp_v = st.number_input("Calor específico vapor [kJ/kg·K]", value=props_def["cp_v"])
 
     p5, p6, p7, p8, p9 = st.columns(5)
-    with p5: rho_l = st.number_input("Densidad líquido [kg/m³]", value=943.0)
-    with p6: mu_l = st.number_input("Viscosidad líquido [mPa·s]", value=0.232)
-    with p7: k_l = st.number_input("Conductividad líquido [W/m·K]", value=0.685)
-    with p8: cp_l = st.number_input("Calor específico líquido [kJ/kg·K]", value=4.25)
-    with p9: t_prop = st.number_input("Temp. de propiedades [°C]", value=120.0)
+    with p5: rho_l = st.number_input("Densidad líquido [kg/m³]", value=props_def["rho_l"])
+    with p6: mu_l = st.number_input("Viscosidad líquido [mPa·s]", value=props_def["mu_l"])
+    with p7: k_l = st.number_input("Conductividad líquido [W/m·K]", value=props_def["k_l"])
+    with p8: cp_l = st.number_input("Calor específico líquido [kJ/kg·K]", value=props_def["cp_l"])
+    with p9: t_prop = st.number_input("Temp. de propiedades [°C]", value=props_def["tsat"])
 
 with tab_in3:
     st.markdown("### Agua de Enfriamiento (Lado Tubos)")
@@ -609,6 +634,6 @@ if st.session_state.get('run_design', False):
     st.markdown("### Descarga de Documentación Oficial")
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
-        st.download_button("Descargar Hoja TEMA en Excel (.xlsx)", data=exportar_hoja_tema_bytes(datos, r, log, warns), file_name="hoja_TEMA_completa.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Descargar Hoja TEMA Clásica (.xlsx)", data=exportar_hoja_tema_bytes(datos, r, log, warns), file_name="hoja_TEMA_completa.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_dl2:
         st.download_button("Descargar Memoria Técnica (.pdf)", data=exportar_pdf_bytes(datos, r, warns), file_name="memoria_calculo.pdf", mime="application/pdf")
