@@ -522,6 +522,38 @@ if st.session_state.get('run_design', False):
     
     st.pyplot(fig)
 
+    # GRÁFICO INTERACTIVO DE SENSIBILIDAD (NUEVO)
+    st.markdown("---")
+    st.header("📉 Gráfico Interactivo de Sensibilidad")
+    st.markdown("Analizá cómo varía el **Área de Intercambio requerida** al modificar el caudal de vapor másico ($Wh$).")
+    
+    wh_rangos = np.linspace(wh * 0.5, wh * 1.5, 20)
+    areas_sensibilidad = []
+    
+    for w_test in wh_rangos:
+        d_test = json.loads(json.dumps(datos))
+        d_test["caliente"]["Wh"] = w_test
+        try:
+            r_test, _, _ = disenar(d_test)
+            areas_sensibilidad.append(r_test["A"])
+        except:
+            areas_sensibilidad.append(np.nan)
+            
+    fig2, ax2 = plt.subplots(figsize=(10, 4.2))
+    fig2.patch.set_facecolor('#1e1730')
+    ax2.set_facecolor('#120f1d')
+    
+    ax2.plot(wh_rangos, areas_sensibilidad, marker='o', color='#bfaee3', linewidth=2.5, markerfacecolor='#6b3fa0')
+    ax2.set_xlabel('Caudal Másico de Vapor ($Wh$) [kg/s]', color='#e2d9ff', fontsize=10)
+    ax2.set_ylabel('Área de Intercambio ($A$) [m²]', color='#e2d9ff', fontsize=10)
+    ax2.set_title('Sensibilidad del Área ante Cambios en el Caudal', color='#e2d9ff', fontsize=12, fontweight='bold')
+    ax2.tick_params(colors='#bfaee3')
+    for spine in ax2.spines.values():
+        spine.set_edgecolor('#332752')
+    ax2.grid(True, linestyle='--', alpha=0.3, color='#4a2b75')
+    
+    st.pyplot(fig2)
+
     # REGISTRO DE ITERACIONES
     st.markdown("---")
     st.header("📝 Registro de Iteraciones del Agente")
