@@ -2,6 +2,8 @@ import streamlit as st
 import json
 import math
 import io
+import matplotlib.pyplot as plt
+import numpy as np
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
@@ -12,13 +14,6 @@ st.markdown("""
         background-color: #120f1d;
         color: #e6e3f8;
     }
-    [data-testid="stSidebar"] {
-        background-color: #1a1528;
-        border-right: 1px solid #2d2445;
-    }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        color: #d4bfff !important;
-    }
     h1, h2, h3 {
         color: #e2d9ff !important;
     }
@@ -28,7 +23,7 @@ st.markdown("""
         border: none;
         border-radius: 8px;
         font-weight: bold;
-        padding: 10px 20px;
+        padding: 12px 24px;
         width: 100%;
         box-shadow: 0 4px 10px rgba(107, 63, 160, 0.4);
         transition: all 0.3s ease;
@@ -56,6 +51,7 @@ st.markdown("""
         border: 1px solid #7d4bc4;
         border-radius: 8px;
         font-weight: bold;
+        padding: 12px 24px;
         width: 100%;
     }
     .stDownloadButton>button:hover {
@@ -66,7 +62,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# --- TUS FUNCIONES ORIGINALES DE CÁLCULO ---
+# --- FUNCIONES DE CÁLCULO ORIGINALES ---
 G = 9.81  # m/s2
 L_STD = [1.83, 2.44, 3.05, 3.66, 4.88, 6.10]
 DS_STD = [x * 0.0254 for x in [8, 10, 12, 13.25, 15.25, 17.25, 19.25, 21.25, 23.25, 25, 27, 29, 31, 33, 35, 37, 39, 42, 45, 48, 54, 60]]
@@ -395,55 +391,81 @@ def exportar_hoja_tema_bytes(d, r, log, warns):
     return out
 
 
-# --- STREAMLIT UI: 4 SECCIONES ORGANIZADAS ---
+# --- INTERFAZ PRINCIPAL: BOTONES ARRIBA Y PESTAÑAS CENTRALES ---
 st.title("💜 Agente de Diseño TEMA — Condensador de Casco y Tubos")
-
-st.sidebar.markdown("### 🎛️ Panel de Control")
-
-# 1. DATOS OPERATIVOS
-with st.sidebar.expander("⚙️ 1. Datos Operativos", expanded=True):
-    item_tag = st.text_input("Ítem / Tag del equipo", value="E-101")
-    servicio_desc = st.text_input("Servicio", value="Condensador de vapor de agua")
-    tema_tipo = st.text_input("Tipo TEMA", value="BEM")
-    ud_est_input = st.number_input("Ud estimada inicial [W/m²·K]", value=2000.0, step=100.0)
-
-# 2. DATOS DE VAPOR (CALIENTE)
-with st.sidebar.expander("🔥 2. Datos de Vapor", expanded=True):
-    wh = st.number_input("Caudal másico vapor (Wh) [kg/s]", value=2.0, step=0.1)
-    t1_hot = st.number_input("Temp. entrada vapor [°C]", value=120.2, step=0.1)
-    t2_hot = st.number_input("Temp. salida vapor [°C]", value=120.2, step=0.1)
-    tsat = st.number_input("Temperatura de condensación / sat. [°C]", value=120.2, step=0.1)
-    lam = st.number_input("Calor latente (lambda) [J/kg]", value=2201900.0, step=100.0)
-    rd_hot = st.number_input("Factor de ensuciamiento lado caliente (Rd) [m²·K/W]", value=0.00009, format="%.6f")
-    
-    st.markdown("##### Propiedades del Vapor / Líquido")
-    rho_liq = st.number_input("Densidad líquido [kg/m³]", value=942.9)
-    mu_liq = st.number_input("Viscosidad líquido [Pa·s]", value=0.000232, format="%.6f")
-    k_liq = st.number_input("Conductividad líquido [W/m·K]", value=0.685)
-    rho_vap = st.number_input("Densidad vapor [kg/m³]", value=1.129)
-    mu_vap = st.number_input("Viscosidad vapor [Pa·s]", value=0.000013, format="%.6f")
-
-# 3. DATOS DE LÍQUIDO FRÍO
-with st.sidebar.expander("💧 3. Datos de Líquido Frío", expanded=True):
-    t1_cold = st.number_input("Temp. entrada agua fría (t1) [°C]", value=25.0, step=0.1)
-    t2_cold = st.number_input("Temp. salida agua fría (t2) [°C]", value=40.0, step=0.1)
-    rd_cold = st.number_input("Factor de ensuciamiento lado frío (Rd) [m²·K/W]", value=0.00035, format="%.6f")
-    cp_c = st.number_input("Calor específico líquido frío [J/kg·K]", value=4178.0)
-    rho_c = st.number_input("Densidad líquido frío [kg/m³]", value=995.0)
-    mu_c = st.number_input("Viscosidad líquido frío [Pa·s]", value=0.00076, format="%.5f")
-    k_c = st.number_input("Conductividad líquido frío [W/m·K]", value=0.62)
-
-# 4. DATOS GEOMÉTRICOS
-with st.sidebar.expander("📐 4. Datos Geométricos", expanded=True):
-    do_tube = st.number_input("Diámetro externo tubo (Do) [m]", value=0.01905, format="%.5f")
-    di_tube = st.number_input("Diámetro interno tubo (Di) [m]", value=0.01483, format="%.5f")
-    l_max = st.number_input("Longitud máxima de tubo (L_max) [m]", value=4.88, step=0.1)
-    pt_pitch = st.number_input("Paso de tubos (Pt) [m]", value=0.02381, format="%.5f")
-    k_wall = st.number_input("Conductividad pared tubo [W/m·K]", value=50.0)
-
 st.markdown("---")
 
-if st.button("🚀 Ejecutar Diseño Óptimo y Generar Hoja TEMA"):
+# BOTÓN PRINCIPAL ARRIBA DE TODO
+col_btn1, col_btn2 = st.columns([2, 1])
+with col_btn1:
+    ejecutar = st.button("🚀 Ejecutar Diseño Óptimo y Generar Hoja TEMA")
+
+st.markdown("### 🎛️ Parámetros de Diseño y Proceso")
+
+# PESTAÑAS GRANDES EN EL CENTRO DE LA PANTALLA
+tab1, tab2, tab3, tab4 = st.tabs([
+    "⚙️ Datos Operativos", 
+    "🔥 Datos de Vapor (Caliente)", 
+    "💧 Líquido Frío", 
+    "📐 Datos Geométricos"
+])
+
+with tab1:
+    st.markdown("#### Configuración Operativa General")
+    c1, c2 = st.columns(2)
+    with c1:
+        item_tag = st.text_input("Ítem / Tag del equipo", value="E-101")
+        servicio_desc = st.text_input("Servicio", value="Condensador de vapor de agua")
+    with c2:
+        tema_tipo = st.text_input("Tipo TEMA", value="BEM")
+        ud_est_input = st.number_input("Ud estimada inicial [W/m²·K]", value=2000.0, step=100.0)
+
+with tab2:
+    st.markdown("#### Condiciones del Vapor y Propiedades")
+    c1, c2 = st.columns(2)
+    with c1:
+        wh = st.number_input("Caudal másico vapor (Wh) [kg/s]", value=2.0, step=0.1)
+        t1_hot = st.number_input("Temp. entrada vapor [°C]", value=120.2, step=0.1)
+        t2_hot = st.number_input("Temp. salida vapor [°C]", value=120.2, step=0.1)
+        tsat = st.number_input("Temperatura de condensación / sat. [°C]", value=120.2, step=0.1)
+        lam = st.number_input("Calor latente (lambda) [J/kg]", value=2201900.0, step=100.0)
+        rd_hot = st.number_input("Factor de ensuciamiento lado caliente (Rd) [m²·K/W]", value=0.00009, format="%.6f")
+    with c2:
+        rho_liq = st.number_input("Densidad líquido [kg/m³]", value=942.9)
+        mu_liq = st.number_input("Viscosidad líquido [Pa·s]", value=0.000232, format="%.6f")
+        k_liq = st.number_input("Conductividad líquido [W/m·K]", value=0.685)
+        rho_vap = st.number_input("Densidad vapor [kg/m³]", value=1.129)
+        mu_vap = st.number_input("Viscosidad vapor [Pa·s]", value=0.000013, format="%.6f")
+
+with tab3:
+    st.markdown("#### Condiciones del Líquido Frío y Propiedades")
+    c1, c2 = st.columns(2)
+    with c1:
+        t1_cold = st.number_input("Temp. entrada agua fría (t1) [°C]", value=25.0, step=0.1)
+        t2_cold = st.number_input("Temp. salida agua fría (t2) [°C]", value=40.0, step=0.1)
+        rd_cold = st.number_input("Factor de ensuciamiento lado frío (Rd) [m²·K/W]", value=0.00035, format="%.6f")
+    with c2:
+        cp_c = st.number_input("Calor específico líquido frío [J/kg·K]", value=4178.0)
+        rho_c = st.number_input("Densidad líquido frío [kg/m³]", value=995.0)
+        mu_c = st.number_input("Viscosidad líquido frío [Pa·s]", value=0.00076, format="%.5f")
+        k_c = st.number_input("Conductividad líquido frío [W/m·K]", value=0.62)
+
+with tab4:
+    st.markdown("#### Parámetros Geométricos y Constructivos")
+    c1, c2 = st.columns(2)
+    with c1:
+        do_tube = st.number_input("Diámetro externo tubo (Do) [m]", value=0.01905, format="%.5f")
+        di_tube = st.number_input("Diámetro interno tubo (Di) [m]", value=0.01483, format="%.5f")
+        l_max = st.number_input("Longitud máxima de tubo (L_max) [m]", value=4.88, step=0.1)
+    with c2:
+        pt_pitch = st.number_input("Paso de tubos (Pt) [m]", value=0.02381, format="%.5f")
+        k_wall = st.number_input("Conductividad pared tubo [W/m·K]", value=50.0)
+
+# EJECUCIÓN DEL DISEÑO
+if ejecutar:
+    st.session_state['run_design'] = True
+
+if st.session_state.get('run_design', False):
     datos = {
         "identificacion": {"item": item_tag, "servicio": servicio_desc, "cliente": "Práctica Integradora", "tema": tema_tipo, "orientacion": "Horizontal", "material_tubos": "Acero al carbono", "material_casco": "Acero al carbono"},
         "caliente": {"fluido": "Vapor de agua saturado", "Wh": wh, "T1": t1_hot, "T2": t2_hot, "T_sat": tsat, "P_oper": 200000.0, "lambda": lam, "cp_vapor": 0.0, "cp_liquido": 0.0, "rho_liquido": rho_liq, "mu_liquido": mu_liq, "k_liquido": k_liq, "rho_vapor": rho_vap, "mu_vapor": mu_vap, "dp_adm": 20000.0, "Rd": rd_hot},
@@ -454,28 +476,64 @@ if st.button("🚀 Ejecutar Diseño Óptimo y Generar Hoja TEMA"):
     
     r, log, warns = disenar(datos)
     
-    st.success("✨ ¡Diseño completado con éxito utilizando tu motor original!")
+    st.markdown("---")
+    st.header("📊 Resultados del Desempeño Térmico e Hidráulico")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Cascos en serie (Ns)", r["Ns"])
         st.metric("Diámetro carcasa (Ds)", f"{r['Ds']*1000:.1f} mm")
+    with col2:
         st.metric("Número de tubos (Nt)", r["Nt"])
         st.metric("Longitud del tubo (L)", f"{r['L']:.2f} m")
-    with col2:
-        st.metric("Coeficiente Global Limpio (Uc)", f"{r['Uc']:.1f} W/m²K")
-        st.metric("Coeficiente Global Diseño (Ud)", f"{r['Ud']:.1f} W/m²K")
-        st.metric("Área de intercambio", f"{r['A']:.2f} m²")
-        st.metric("Espaciado deflectores (B)", f"{r['B']*1000:.1f} mm")
+    with col3:
+        st.metric("Uc (Limpio)", f"{r['Uc']:.1f} W/m²K")
+        st.metric("Ud (Diseño)", f"{r['Ud']:.1f} W/m²K")
+    with col4:
+        st.metric("Área de Intercambio", f"{r['A']:.2f} m²")
+        st.metric("Espac. Deflectores (B)", f"{r['B']*1000:.1f} mm")
         
     if warns:
         for w in warns:
             st.warning(w)
 
-    # Generar archivo Excel descargable
+    # GRÁFICO DE TEMPERATURAS
+    st.markdown("---")
+    st.header("📈 Perfil de Temperaturas del Condensador")
+    
+    x_vals = np.linspace(0, r['L'], 100)
+    T_hot = [tsat] * len(x_vals)
+    t_cold = np.linspace(t1_cold, t2_cold, len(x_vals))
+    
+    fig, ax = plt.subplots(figsize=(10, 4.5))
+    fig.patch.set_facecolor('#1e1730')
+    ax.set_facecolor('#120f1d')
+    
+    ax.plot(x_vals, T_hot, label='Fluido Caliente (Vapor Sat.)', color='#d4bfff', linewidth=3)
+    ax.plot(x_vals, t_cold, label='Fluido Frío (Agua)', color='#7d4bc4', linewidth=3)
+    
+    ax.set_xlabel('Posición axial en el intercambiador [m]', color='#e2d9ff', fontsize=10)
+    ax.set_ylabel('Temperatura [°C]', color='#e2d9ff', fontsize=10)
+    ax.set_title('Perfil Térmico Axial', color='#e2d9ff', fontsize=12, fontweight='bold')
+    ax.legend(facecolor='#1a1528', edgecolor='#332752', labelcolor='#e2d9ff')
+    ax.tick_params(colors='#bfaee3')
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#332752')
+    
+    st.pyplot(fig)
+
+    # REGISTRO DE ITERACIONES
+    st.markdown("---")
+    st.header("📝 Registro de Iteraciones del Agente")
+    with st.expander("Ver log paso a paso de la búsqueda geométrica", expanded=False):
+        for linea in log:
+            st.text(linea)
+
+    # HOJA DE ESPECIFICACIONES ABAJO PARA DESCARGAR
+    st.markdown("---")
+    st.header("📥 Descarga de la Hoja de Especificaciones")
     excel_file = exportar_hoja_tema_bytes(datos, r, log, warns)
     
-    st.markdown("<br>", unsafe_allow_html=True)
     st.download_button(
         label="📥 Descargar Hoja TEMA Actualizada (.xlsx)",
         data=excel_file,
