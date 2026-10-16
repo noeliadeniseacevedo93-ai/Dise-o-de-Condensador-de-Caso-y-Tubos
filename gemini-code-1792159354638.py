@@ -1,7 +1,6 @@
 import streamlit as st
 import json
 import math
-import io
 
 # --- TUS FUNCIONES ORIGINALES (INTACTAS) ---
 G = 9.81  # m/s2
@@ -184,37 +183,59 @@ def disenar(d):
     return final, log, warns
 
 
-# --- INTERFAZ WEB CON STREAMLIT (RESPETA TU CÓDIGO) ---
-st.title("Agente de Diseño TEMA - Condensador")
+# --- INTERFAZ WEB COMPLETA CON STREAMLIT ---
+st.title("Agente de Diseño TEMA — Condensador de Casco y Tubos")
 
-st.sidebar.header("Parámetros de Entrada")
-wh = st.sidebar.number_input("Caudal másico vapor (Wh) [kg/s]", value=2.0)
-tsat = st.sidebar.number_input("Temperatura saturación [°C]", value=120.2)
-lambda_vap = st.sidebar.number_input("Calor latente (lambda) [J/kg]", value=2201900.0)
-t1 = st.sidebar.number_input("Temp. entrada agua fría (t1) [°C]", value=25.0)
-t2 = st.sidebar.number_input("Temp. salida agua fría (t2) [°C]", value=40.0)
+st.sidebar.header("1. Corriente Caliente (Casco)")
+wh = st.sidebar.number_input("Caudal másico (Wh) [kg/s]", value=2.0, step=0.1)
+t1_hot = st.sidebar.number_input("Temperatura de entrada [°C]", value=120.2, step=0.1)
+t2_hot = st.sidebar.number_input("Temperatura de salida [°C]", value=120.2, step=0.1)
+tsat = st.sidebar.number_input("Temperatura de saturación [°C]", value=120.2, step=0.1)
+lam = st.sidebar.number_input("Calor latente (lambda) [J/kg]", value=2201900.0, step=100.0)
 
-if st.button("Ejecutar Diseño Térmico"):
-    # Cargamos tu diccionario base de ejemplo
+st.sidebar.subheader("Propiedades Líquido/Vapor Caliente")
+rho_liq = st.sidebar.number_input("Densidad líquido [kg/m³]", value=942.9)
+mu_liq = st.sidebar.number_input("Viscosidad líquido [Pa·s]", value=0.000232, format="%.6f")
+k_liq = st.sidebar.number_input("Conductividad líquido [W/m·K]", value=0.685)
+rho_vap = st.sidebar.number_input("Densidad vapor [kg/m³]", value=1.129)
+mu_vap = st.sidebar.number_input("Viscosidad vapor [Pa·s]", value=0.000013, format="%.6f")
+
+st.sidebar.header("2. Corriente Fría (Tubos)")
+t1_cold = st.sidebar.number_input("Temp. entrada agua fría (t1) [°C]", value=25.0, step=0.1)
+t2_cold = st.sidebar.number_input("Temp. salida agua fría (t2) [°C]", value=40.0, step=0.1)
+
+st.sidebar.header("3. Condiciones Geométricas")
+do_tube = st.sidebar.number_input("Diámetro externo tubo (Do) [m]", value=0.01905, format="%.5f")
+di_tube = st.sidebar.number_input("Diámetro interno tubo (Di) [m]", value=0.01483, format="%.5f")
+l_max = st.sidebar.number_input("Longitud máxima de tubo (L_max) [m]", value=4.88, step=0.1)
+pt_pitch = st.sidebar.number_input("Paso de tubos (Pt) [m]", value=0.02381, format="%.5f")
+k_wall = st.sidebar.number_input("Conductividad pared tubo [W/m·K]", value=50.0)
+
+if st.button("Ejecutar Diseño Óptimo"):
     datos = {
         "identificacion": {"item": "E-101", "servicio": "Condensador", "cliente": "Práctica", "tema": "BEM", "orientacion": "Horizontal", "material_tubos": "Acero al carbono", "material_casco": "Acero al carbono"},
-        "caliente": {"fluido": "Vapor", "Wh": wh, "T1": tsat, "T2": tsat, "T_sat": tsat, "P_oper": 200000.0, "lambda": lambda_vap, "cp_vapor": 0.0, "cp_liquido": 0.0, "rho_liquido": 942.9, "mu_liquido": 0.000232, "k_liquido": 0.685, "rho_vapor": 1.129, "mu_vapor": 1.3e-05, "dp_adm": 20000.0, "Rd": 9e-05},
-        "fria": {"fluido": "Agua", "Wc": None, "t1": t1, "t2": t2, "P_oper": 400000.0, "cp": 4178.0, "mu": 0.00076, "k": 0.62, "rho": 995.0, "dp_adm": 70000.0, "Rd": 0.00035},
-        "geometria": {"Do": 0.01905, "Di": 0.01483, "L_max": 4.88, "arreglo": "triangular", "Pt": 0.02381, "k_pared": 50.0, "Ud_est": 2000.0, "v_min": 1.0, "v_max": 3.0},
+        "caliente": {"fluido": "Vapor de agua", "Wh": wh, "T1": t1_hot, "T2": t2_hot, "T_sat": tsat, "P_oper": 200000.0, "lambda": lam, "cp_vapor": 0.0, "cp_liquido": 0.0, "rho_liquido": rho_liq, "mu_liquido": mu_liq, "k_liquido": k_liq, "rho_vapor": rho_vap, "mu_vapor": mu_vap, "dp_adm": 20000.0, "Rd": 9e-05},
+        "fria": {"fluido": "Agua de enfriamiento", "Wc": None, "t1": t1_cold, "t2": t2_cold, "P_oper": 400000.0, "cp": 4178.0, "mu": 0.00076, "k": 0.62, "rho": 995.0, "dp_adm": 70000.0, "Rd": 0.00035},
+        "geometria": {"Do": do_tube, "Di": di_tube, "L_max": l_max, "arreglo": "triangular", "Pt": pt_pitch, "k_pared": k_wall, "Ud_est": 2000.0, "v_min": 1.0, "v_max": 3.0},
         "condensa_en": "casco"
     }
     
     r, log, warns = disenar(datos)
     
-    st.subheader("Resultados del Diseño")
-    st.metric("Cascos en serie (Ns)", r["Ns"])
-    st.metric("Diámetro carcasa (Ds)", f"{r['Ds']*1000:.1f} mm")
-    st.metric("Número de tubos (Nt)", r["Nt"])
-    st.metric("Longitud (L)", f"{r['L']:.2f} m")
-    st.metric("Coeficiente Global Limpio (Uc)", f"{r['Uc']:.1f} W/m²K")
-    st.metric("Coeficiente Global Diseño (Ud)", f"{r['Ud']:.1f} W/m²K")
-    st.metric("Área de intercambio", f"{r['A']:.2f} m²")
+    st.success("¡Diseño completado con éxito usando tu motor original!")
     
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Cascos en serie (Ns)", r["Ns"])
+        st.metric("Diámetro carcasa (Ds)", f"{r['Ds']*1000:.1f} mm")
+        st.metric("Número de tubos (Nt)", r["Nt"])
+        st.metric("Longitud del tubo (L)", f"{r['L']:.2f} m")
+    with col2:
+        st.metric("Coeficiente Global Limpio (Uc)", f"{r['Uc']:.1f} W/m²K")
+        st.metric("Coeficiente Global Diseño (Ud)", f"{r['Ud']:.1f} W/m²K")
+        st.metric("Área de intercambio", f"{r['A']:.2f} m²")
+        st.metric("Espaciado deflectores (B)", f"{r['B']*1000:.1f} mm")
+        
     if warns:
         for w in warns:
             st.warning(w)
