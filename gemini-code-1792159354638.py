@@ -199,4 +199,294 @@ def buscar_geometria(d, A_req, Ns, log):
     Do, Pt, arr, rear = geo["Do"], geo["Pt"], geo["arreglo"], d["rear"]
     h = d["caliente"]
     isoterma = abs(h["T1"] - h["T2"]) < 1e-9
-    n_opts = [1, 2, 4, 6, 8] if (isoterma and rear)
+    n_opts = [1, 2, 4, 6, 8] if (isoterma and rear != "U") else [2, 4, 6, 8]
+    L_opts = sorted({l for l in L_STD if l <= geo["L_max"]} | {geo["L_max"]}, reverse=True)
+    vmin, vmax = geo["v_min"], geo["v_max"]
+    mejor_fallback = None
+
+    for L in L_opts:
+        Nt_tot = math.ceil(A_req / (math.pi * Do * L))
+        Nt_s = math.ceil(Nt_tot / Ns)
+        for n in n_opts:
+            Nt = int(math.ceil(Nt_s / n) * n)
+            idx0 = next((i for i, Ds in enumerate(DS_STD) if capacidad_tubos(Ds, n, Do, Pt, arr, rear) >= Nt), None)
+            if idx0 is None: continue
+            for idx in range(idx0, min(idx0 + 4, len(DS_STD))):
+                Ds = DS_STD[idx]
+                frac = 0.40
+                while frac <= 1.0001:
+                    B = max(min(frac * Ds, 1.52), 0.05, Ds / 5)
+                    g = dict(Ns=Ns, Nt=Nt, n=n, L=L, Ds=Ds, B=B)
+                    r = evaluar(d, g)
+                    if r["dPs"] <= r["dp_s_adm"]: break
+                    frac += 0.05
+                v_ok = vmin <= r["v_t"] <= vmax if d["condensa_en"] == "casco" else True
+                if r["ok_dp"] and v_ok: return r
+                if r["ok_dp"] and mejor_fallback is None: mejor_fallback = r
+    return mejor_fallback
+
+def disenar(d):
+    log, warns = [], []
+    preparar(d, warns)
+    h, c = d["caliente"], d["fria"]
+    T1, T2, t1, t2 = h["T1"], h["T2"], c["t1"], c["t2"]
+    d["DMLT"] = dmlt_contracorriente(T1, T2, t1, t2)
+    Ns = 1
+    while True:
+        Ft = factor_ft(T1, T2, t1, t2, Ns)
+        if Ft >= 0.75 or Ns >= 6: break
+        Ns += 1
+    d["Ft"], d["Ns"] = Ft, Ns
+    Ud_est = d["geometria"]["Ud_est"]
+    factibles, ultimo = [], None
+    for _ in range(30):
+        A_prov = d["Q"] / (Ud_est * d["DMLT"] * Ft)
+        r = buscar_geometria(d, A_prov, Ns, log)
+        if r is None:
+            Ud_est *= 0.9
+            continue
+        ultimo = r
+        exceso = r["A"] / r["A_req_final"] - 1
+        Ud_tgt = 1 / (1 / r["Uc"] + d["Rd_req"])
+        if r["ok_Rd"]:
+            factibles.append(r)
+            if exceso <= 0.25: break
+            Ud_est = Ud_est * Ud_tgt / r["Ud"] * 0.97
+        else:
+            Ud_est = Ud_est * Ud_tgt / r["Ud"] * 0.98
+    final = min(factibles, key=lambda x: x["A"]) if factibles else ultimo
+    return final, log, warns
+
+def exportar_hoja_tema_bytes(d, r, log, warns):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Hoja TEMA"
+    F = "Arial"
+    thin = Side(style="thin", color="999999")
+    brd = Border(left=thin, right=thin, top=thin, bottom=thin)
+    fill_h = PatternFill("solid", fgColor="321c54")
+    fill_s = PatternFill("solid", fgColor="4a2b75")
+    ws.column_dimensions["A"].width = 38
+    for col in "BCD":
+        ws.column_dimensions[col].width = 24
+    ws.column_dimensions["E"].width = 14
+
+    row = [1]
+    ref = {}
+
+    def titulo(txt):
+        ws.cell(row[0], 1, txt)
+        ws.merge_cells(start_row=row[0], start_column=1, end_row=row[0], end_column=5)
+        c_ = ws.cell(row[0], 1)
+        c_.font = Font(name=F, bold=True, color="FFFFFF", size=11)
+        c_.fill = fill_h
+        row[0] += 1
+
+    def encabezado(*vals):
+        for i, v in enumerate(vals):
+            c_ = ws.cell(row[0], 1 + i, v)
+            c_.font = Font(name=F, bold=True, color="FFFFFF", size=10)
+            c_.fill = fill_s
+            c_.border = brd
+            c_.alignment = Alignment(horizontal="center")
+        row[0] += 1
+
+    def fila(*vals, key=None, fmt=None):
+        for i, v in enumerate(vals):
+            c_ = ws.cell(row[0], 1 + i, v)
+            c_.font = Font(name=F, size=10)
+            c_.border = brd
+            if i > 0 and fmt and isinstance(v, (int, float, str)) and (not isinstance(v, str) or v.startswith("=")):
+                c_.number_format = fmt
+            if i > 0:
+                c_.alignment = Alignment(horizontal="right")
+        if key:
+            ref[key] = row[0]
+        row[0] += 1
+
+    idn, h, c, geo = d["identificacion"], d["caliente"], d["fria"], d["geometria"]
+    cas = d["condensa_en"] == "casco"
+    S = (h if cas else c)
+    T = (c if cas else h)
+
+    ws.cell(row[0], 1, "HOJA DE ESPECIFICACIONES TÉCNICAS — INTERCAMBIADOR DE CASCO Y TUBOS (TEMA)")
+    ws.merge_cells(start_row=row[0], start_column=1, end_row=row[0], end_column=5)
+    ws.cell(row[0], 1).font = Font(name=F, bold=True, size=13)
+    row[0] += 2
+
+    titulo("1. DATOS DE IDENTIFICACIÓN DEL EQUIPO")
+    fila("Ítem / Tag", idn["item"])
+    fila("Servicio", idn["servicio"])
+    fila("Cliente / Proyecto", idn["cliente"])
+    fila("Tipo TEMA", idn["tema"])
+    fila("Orientación", idn["orientacion"])
+    fila("Cascos en serie", r["Ns"])
+    row[0] += 1
+
+    titulo("2. CONDICIONES DE OPERACIÓN Y PROCESO")
+    encabezado("Parámetro", "Lado casco", "Lado tubos", "Unidad")
+    fila("Fluido", S["fluido"], T["fluido"], "-")
+    wS = h["Wh"] if cas else c["Wc"]
+    wT = c["Wc"] if cas else h["Wh"]
+    fila("Caudal másico", round(wS, 3), round(wT, 3), "kg/s", fmt="0.000")
+    fila("Temperatura de entrada", S.get("T1", S.get("t1")), T.get("T1", T.get("t1")), "°C", fmt="0.0")
+    fila("Temperatura de salida", S.get("T2", S.get("t2")), T.get("T2", T.get("t2")), "°C", fmt="0.0")
+    fila("Presión de operación", round(S["P_oper"] / 1e3, 1), round(T["P_oper"] / 1e3, 1), "kPa abs", fmt="0.0")
+    if cas:
+        fila("Calor latente de condensación", round(h["lambda"] / 1e3, 1), "-", "kJ/kg", fmt="0.0")
+        fila("Densidad (líquido / vapor)", f"{h['rho_liquido']} / {h['rho_vapor']}", c["rho"], "kg/m³")
+        fila("Viscosidad", f"{h['mu_liquido'] * 1e3:.4f}", f"{c['mu'] * 1e3:.4f}", "mPa·s")
+        fila("Conductividad térmica", h["k_liquido"], c["k"], "W/m·K")
+        fila("Calor específico", "-", c["cp"], "J/kg·K")
+    else:
+        fila("Calor latente de condensación", "-", round(h["lambda"] / 1e3, 1), "kJ/kg", fmt="0.0")
+        fila("Densidad", c["rho"], f"{h['rho_liquido']} / {h['rho_vapor']}", "kg/m³")
+        fila("Viscosidad", f"{c['mu'] * 1e3:.4f}", f"{h['mu_liquido'] * 1e3:.4f}", "mPa·s")
+        fila("Conductividad térmica", c["k"], h["k_liquido"], "W/m·K")
+        fila("Calor específico", c["cp"], "-", "J/kg·K")
+    fila("Velocidad", round(r["v_s"], 2), round(r["v_t"], 2), "m/s", fmt="0.00")
+    fila("Factor de ensuciamiento", S["Rd"], T["Rd"], "m²·K/W", fmt="0.00000")
+    fila("Δp admisible", round(r["dp_s_adm"] / 1e3, 1), round(r["dp_t_adm"] / 1e3, 1), "kPa", fmt="0.0")
+    fila("Δp calculada", round(r["dPs"] / 1e3, 2), round(r["dPt"] / 1e3, 2), "kPa", fmt="0.00")
+    fila("Carga térmica Q", round(d["Q"] / 1e3, 1), "", "kW", fmt="#,##0.0")
+    fila("DMLT (contracorriente)", round(d["DMLT"], 2), "", "°C", fmt="0.00")
+    fila("Factor Ft", round(d["Ft"], 3), "", "-", fmt="0.000")
+    row[0] += 1
+
+    titulo("3. DATOS GEOMÉTRICOS Y CONSTRUCTIVOS")
+    encabezado("Parámetro", "Haz tubular", "Carcasa", "Unidad")
+    fila("Diámetro externo / interno de tubo", f"{geo['Do'] * 1000:.2f} / {geo['Di'] * 1000:.2f}", "", "mm")
+    fila("Diámetro interno de carcasa Ds", "", round(r["Ds"] * 1000, 1), "mm", fmt="0.0")
+    fila("Número de tubos por casco (Nt)", r["Nt"], "", "-", key="Nt")
+    fila("Longitud de tubo (L)", r["L"], "", "m", key="L", fmt="0.00")
+    fila("Número de pasos por tubo", r["n"], "", "-")
+    fila("Arreglo de tubos", "Triangular 60°" if geo["arreglo"] != "cuadro" else "Cuadro 90°", "", "-")
+    fila("Paso de tubos (Pt)", round(geo["Pt"] * 1000, 2), "", "mm", fmt="0.00")
+    fila("Material", idn["material_tubos"], idn["material_casco"], "-")
+    fila("Espaciado de deflectores (B)", "", round(r["B"] * 1000, 1), "mm", fmt="0.0")
+    fila("Número de deflectores", "", r["Nb"], "-")
+    fila("Corte de deflector", "", "25 % segmentado", "-")
+    fila("Superficie por casco", "", "", "m²")
+    ref["A_casco"] = row[0] - 1
+    row[0] += 1
+
+    titulo("4. RESULTADOS DE DESEMPEÑO TÉRMICO E HIDRÁULICO")
+    encabezado("Parámetro", "Valor", "", "Unidad")
+    fila("ho (coeficiente película lado casco)", round(r["ho"], 1), "", "W/m²·K", fmt="#,##0.0")
+    fila("hi (coeficiente película lado tubos)", round(r["hi"], 1), "", "W/m²·K", fmt="#,##0.0")
+    fila("Uc (limpio)", round(r["Uc"], 1), "", "W/m²·K", key="Uc", fmt="#,##0.0")
+    fila("Ud (diseño)", round(r["Ud"], 1), "", "W/m²·K", key="Ud", fmt="#,##0.0")
+    fila("Rd_calc", "", "", "m²·K/W", key="Rd")
+    fila("Rd_requerido", round(d["Rd_req"], 6), "", "m²·K/W", key="Rdreq", fmt="0.000000")
+    fila("Área de intercambio requerida", round(r["A_req_final"], 2), "", "m²", key="Areq", fmt="0.00")
+    fila("Área de intercambio proporcionada", "", "", "m²", key="Aprov")
+    fila("Exceso de área", "", "", "%", key="Exc")
+    fila("Δp calculada lado casco", round(r["dPs"] / 1e3, 2), "", "kPa", fmt="0.00")
+    fila("Δp calculada lado tubos", round(r["dPt"] / 1e3, 2), "", "kPa", fmt="0.00")
+    fila("Cumple Rd y Δp", "SÍ" if (r["ok_Rd"] and r["ok_dp"]) else "NO", "", "-")
+
+    ws.cell(ref["A_casco"], 3, f"=B{ref['Nt']}*PI()*{geo['Do']}*B{ref['L']}")
+    ws.cell(ref["A_casco"], 3).number_format = "0.00"
+    ws.cell(ref["Rd"], 2, f"=(B{ref['Uc']}-B{ref['Ud']})/(B{ref['Uc']}*B{ref['Ud']})")
+    ws.cell(ref["Rd"], 2).number_format = "0.000000"
+    ws.cell(ref["Aprov"], 2, f"={r['Ns']}*C{ref['A_casco']}")
+    ws.cell(ref["Aprov"], 2).number_format = "0.00"
+    ws.cell(ref["Exc"], 2, f"=(B{ref['Aprov']}/B{ref['Areq']}-1)*100")
+    ws.cell(ref["Exc"], 2).number_format = "0.0"
+
+    ws2 = wb.create_sheet("Iteraciones")
+    ws2.column_dimensions["A"].width = 160
+    ws2.cell(1, 1, "Registro de decisiones del agente").font = Font(name=F, bold=True, size=11)
+    for i, linea in enumerate(log, start=2):
+        ws2.cell(i, 1, linea).font = Font(name=F, size=9)
+
+    out = io.BytesIO()
+    wb.save(out)
+    out.seek(0)
+    return out
+
+
+# --- STREAMLIT UI: 4 SECCIONES ORGANIZADAS ---
+st.title("💜 Agente de Diseño TEMA — Condensador de Casco y Tubos")
+
+st.sidebar.markdown("### 🎛️ Panel de Control")
+
+# 1. DATOS OPERATIVOS
+with st.sidebar.expander("⚙️ 1. Datos Operativos", expanded=True):
+    item_tag = st.text_input("Ítem / Tag del equipo", value="E-101")
+    servicio_desc = st.text_input("Servicio", value="Condensador de vapor de agua")
+    tema_tipo = st.text_input("Tipo TEMA", value="BEM")
+
+# 2. DATOS DE VAPOR (CALIENTE)
+with st.sidebar.expander("🔥 2. Datos de Vapor", expanded=True):
+    wh = st.number_input("Caudal másico vapor (Wh) [kg/s]", value=2.0, step=0.1)
+    t1_hot = st.number_input("Temp. entrada vapor [°C]", value=120.2, step=0.1)
+    t2_hot = st.number_input("Temp. salida vapor [°C]", value=120.2, step=0.1)
+    tsat = st.number_input("Temperatura de condensación / sat. [°C]", value=120.2, step=0.1)
+    lam = st.number_input("Calor latente (lambda) [J/kg]", value=2201900.0, step=100.0)
+    
+    st.markdown("##### Propiedades del Vapor / Líquido")
+    rho_liq = st.number_input("Densidad líquido [kg/m³]", value=942.9)
+    mu_liq = st.number_input("Viscosidad líquido [Pa·s]", value=0.000232, format="%.6f")
+    k_liq = st.number_input("Conductividad líquido [W/m·K]", value=0.685)
+    rho_vap = st.number_input("Densidad vapor [kg/m³]", value=1.129)
+    mu_vap = st.number_input("Viscosidad vapor [Pa·s]", value=0.000013, format="%.6f")
+
+# 3. DATOS DE LÍQUIDO FRÍO
+with st.sidebar.expander("💧 3. Datos de Líquido Frío", expanded=True):
+    t1_cold = st.number_input("Temp. entrada agua fría (t1) [°C]", value=25.0, step=0.1)
+    t2_cold = st.number_input("Temp. salida agua fría (t2) [°C]", value=40.0, step=0.1)
+    cp_c = st.number_input("Calor específico líquido frío [J/kg·K]", value=4178.0)
+    rho_c = st.number_input("Densidad líquido frío [kg/m³]", value=995.0)
+    mu_c = st.number_input("Viscosidad líquido frío [Pa·s]", value=0.00076, format="%.5f")
+    k_c = st.number_input("Conductividad líquido frío [W/m·K]", value=0.62)
+
+# 4. DATOS GEOMÉTRICOS
+with st.sidebar.expander("📐 4. Datos Geométricos", expanded=True):
+    do_tube = st.number_input("Diámetro externo tubo (Do) [m]", value=0.01905, format="%.5f")
+    di_tube = st.number_input("Diámetro interno tubo (Di) [m]", value=0.01483, format="%.5f")
+    l_max = st.number_input("Longitud máxima de tubo (L_max) [m]", value=4.88, step=0.1)
+    pt_pitch = st.number_input("Paso de tubos (Pt) [m]", value=0.02381, format="%.5f")
+    k_wall = st.number_input("Conductividad pared tubo [W/m·K]", value=50.0)
+
+st.markdown("---")
+
+if st.button("🚀 Ejecutar Diseño Óptimo y Generar Hoja TEMA"):
+    datos = {
+        "identificacion": {"item": item_tag, "servicio": servicio_desc, "cliente": "Práctica Integradora", "tema": tema_tipo, "orientacion": "Horizontal", "material_tubos": "Acero al carbono", "material_casco": "Acero al carbono"},
+        "caliente": {"fluido": "Vapor de agua saturado", "Wh": wh, "T1": t1_hot, "T2": t2_hot, "T_sat": tsat, "P_oper": 200000.0, "lambda": lam, "cp_vapor": 0.0, "cp_liquido": 0.0, "rho_liquido": rho_liq, "mu_liquido": mu_liq, "k_liquido": k_liq, "rho_vapor": rho_vap, "mu_vapor": mu_vap, "dp_adm": 20000.0, "Rd": 9e-05},
+        "fria": {"fluido": "Agua de enfriamiento", "Wc": None, "t1": t1_cold, "t2": t2_cold, "P_oper": 400000.0, "cp": cp_c, "mu": mu_c, "k": k_c, "rho": rho_c, "dp_adm": 70000.0, "Rd": 0.00035},
+        "geometria": {"Do": do_tube, "Di": di_tube, "L_max": l_max, "arreglo": "triangular", "Pt": pt_pitch, "k_pared": k_wall, "Ud_est": 2000.0, "v_min": 1.0, "v_max": 3.0},
+        "condensa_en": "casco"
+    }
+    
+    r, log, warns = disenar(datos)
+    
+    st.success("✨ ¡Diseño completado con éxito utilizando tu motor original!")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Cascos en serie (Ns)", r["Ns"])
+        st.metric("Diámetro carcasa (Ds)", f"{r['Ds']*1000:.1f} mm")
+        st.metric("Número de tubos (Nt)", r["Nt"])
+        st.metric("Longitud del tubo (L)", f"{r['L']:.2f} m")
+    with col2:
+        st.metric("Coeficiente Global Limpio (Uc)", f"{r['Uc']:.1f} W/m²K")
+        st.metric("Coeficiente Global Diseño (Ud)", f"{r['Ud']:.1f} W/m²K")
+        st.metric("Área de intercambio", f"{r['A']:.2f} m²")
+        st.metric("Espaciado deflectores (B)", f"{r['B']*1000:.1f} mm")
+        
+    if warns:
+        for w in warns:
+            st.warning(w)
+
+    # Generar archivo Excel descargable
+    excel_file = exportar_hoja_tema_bytes(datos, r, log, warns)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.download_button(
+        label="📥 Descargar Hoja TEMA Actualizada (.xlsx)",
+        data=excel_file,
+        file_name="hoja_TEMA_actualizada.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
