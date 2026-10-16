@@ -236,7 +236,7 @@ def disenar(d):
     return r, log, warns
 
 
-# --- EXPORTADORES A EXCEL Y PDF ---
+# --- EXPORTADOR A HOJA TEMA CLÁSICA COMPLETA EN EXCEL ---
 def exportar_hoja_tema_bytes(d, r, log, warns):
     wb = Workbook()
     ws = wb.active
@@ -251,6 +251,8 @@ def exportar_hoja_tema_bytes(d, r, log, warns):
     ws.column_dimensions["E"].width = 14
 
     row = [1]
+    ref = {}
+
     def titulo(txt):
         ws.cell(row[0], 1, txt)
         ws.merge_cells(start_row=row[0], start_column=1, end_row=row[0], end_column=5)
@@ -268,38 +270,91 @@ def exportar_hoja_tema_bytes(d, r, log, warns):
             c_.alignment = Alignment(horizontal="center")
         row[0] += 1
 
-    def fila(*vals, fmt=None):
+    def fila(*vals, key=None, fmt=None):
         for i, v in enumerate(vals):
             c_ = ws.cell(row[0], 1 + i, v)
             c_.font = Font(name=F, size=10)
             c_.border = brd
-            if i > 0 and fmt: c_.number_format = fmt
+            if i > 0 and fmt and isinstance(v, (int, float, str)) and (not isinstance(v, str) or v.startswith("=")):
+                c_.number_format = fmt
             if i > 0: c_.alignment = Alignment(horizontal="right")
+        if key: ref[key] = row[0]
         row[0] += 1
 
     idn, h, c, geo = d["identificacion"], d["caliente"], d["fria"], d["geometria"]
-    ws.cell(row[0], 1, "HOJA DE ESPECIFICACIONES TÉCNICAS — INTERCAMBIADOR TEMA")
+
+    ws.cell(row[0], 1, "HOJA DE ESPECIFICACIONES TÉCNICAS — INTERCAMBIADOR DE CASCO Y TUBOS (TEMA)")
     ws.merge_cells(start_row=row[0], start_column=1, end_row=row[0], end_column=5)
     ws.cell(row[0], 1).font = Font(name=F, bold=True, size=13)
     row[0] += 2
 
-    titulo("1. DATOS DE IDENTIFICACIÓN")
+    titulo("1. DATOS DE IDENTIFICACIÓN DEL EQUIPO")
     fila("Ítem / Tag", idn["item"])
     fila("Servicio", idn["servicio"])
     fila("Cliente / Cátedra", idn["cliente"])
     fila("Tipo TEMA", idn["tema"])
+    fila("Cascos en serie", r["Ns"])
     row[0] += 1
 
-    titulo("2. RESULTADOS DE DESEMPEÑO")
+    titulo("2. CONDICIONES DE OPERACIÓN Y PROCESO")
+    encabezado("Parámetro", "Lado casco", "Lado tubos", "Unidad")
+    fila("Fluido", "Vapor de agua", "Agua de enfriamiento", "-")
+    fila("Caudal másico", round(h["Wh"], 2), round(c["Wc"], 2), "kg/h", fmt="#,##0.00")
+    fila("Temperatura de entrada", h["T1"], c["t1"], "°C", fmt="0.0")
+    fila("Temperatura de salida", h["T2"], c["t2"], "°C", fmt="0.0")
+    fila("Presión de operación", round(p_oper_s, 2), "-", "kPa abs", fmt="0.00")
+    fila("Calor latente de condensación", round(lam, 2), "-", "kJ/kg", fmt="0.00")
+    fila("Densidad (líquido / vapor)", f"{rho_l} / {rho_v}", "-", "kg/m³")
+    fila("Viscosidad", f"{mu_l}", "-", "mPa·s")
+    fila("Conductividad térmica", k_l, "-", "W/m·K")
+    fila("Factor de ensuciamiento", h["Rd"], c["Rd"], "m²·K/W", fmt="0.000000")
+    fila("Δp admisible", round(dp_adm_s, 1), round(dp_adm_t, 1), "kPa", fmt="0.0")
+    fila("Δp calculada", round(r["dPs"]/1e3, 2), round(r["dPt"]/1e3, 2), "kPa", fmt="0.00")
+    fila("Carga térmica Q", round(d["Q"], 2), "", "kW", fmt="#,##0.00")
+    fila("DMLT (contracorriente)", round(d["DMLT"], 2), "", "°C", fmt="0.00")
+    fila("Factor Ft", round(d["Ft"], 3), "", "-", fmt="0.000")
+    row[0] += 1
+
+    titulo("3. DATOS GEOMÉTRICOS Y CONSTRUCTIVOS")
+    encabezado("Parámetro", "Haz tubular", "Carcasa", "Unidad")
+    fila("Diámetro externo / interno de tubo", f"{do_t*1000:.2f} / {di_t*1000:.2f}", "", "mm")
+    fila("Diámetro interno de carcasa Ds", "", round(r["Ds"]*1000, 1), "mm", fmt="0.0")
+    fila("Número de tubos por casco (Nt)", r["Nt"], "", "-", key="Nt")
+    fila("Longitud de tubo (L)", r["L"], "", "m", key="L", fmt="0.00")
+    fila("Número de pasos por tubo", r["n"], "", "-")
+    fila("Arreglo de tubos", arreglo, "", "-")
+    fila("Paso de tubos (Pt)", round(pt*1000, 2), "", "mm", fmt="0.00")
+    fila("Espaciado de deflectores (B)", "", round(r["B"]*1000, 1), "mm", fmt="0.0")
+    fila("Superficie por casco", "", "", "m²")
+    ref["A_casco"] = row[0] - 1
+    row[0] += 1
+
+    titulo("4. RESULTADOS DE DESEMPEÑO TÉRMICO E HIDRÁULICO")
     encabezado("Parámetro", "Valor", "", "Unidad")
-    fila("Área de intercambio", round(r["A"], 2), "", "m²", fmt="0.00")
-    fila("Coeficiente Limpio (Uc)", round(r["Uc"], 1), "", "W/m²·K", fmt="0.0")
-    fila("Coeficiente de Diseño (Ud)", round(r["Ud"], 1), "", "W/m²·K", fmt="0.0")
-    fila("Δp Casco", round(r["dPs"], 2), "", "kPa", fmt="0.00")
-    fila("Δp Tubos", round(r["dPt"], 2), "", "kPa", fmt="0.00")
+    fila("ho (coeficiente película lado casco)", round(r["ho"], 1), "", "W/m²·K", fmt="#,##0.0")
+    fila("hi (coeficiente película lado tubos)", round(r["hi"], 1), "", "W/m²·K", fmt="#,##0.0")
+    fila("Uc (limpio)", round(r["Uc"], 1), "", "W/m²·K", key="Uc", fmt="#,##0.0")
+    fila("Ud (diseño)", round(r["Ud"], 1), "", "W/m²·K", key="Ud", fmt="#,##0.0")
+    fila("Rd_calc", "", "", "m²·K/W", key="Rd")
+    fila("Rd_requerido", round(d["Rd_req"], 6), "", "m²·K/W", key="Rdreq", fmt="0.000000")
+    fila("Área de intercambio requerida", round(r["A_req_final"], 2), "", "m²", key="Areq", fmt="0.00")
+    fila("Área de intercambio proporcionada", "", "", "m²", key="Aprov")
+    fila("Exceso de área", "", "", "%", key="Exc")
+    fila("Cumple Rd y Δp", "SÍ" if (r["ok_Rd"] and r["ok_dp"]) else "NO", "", "-")
+
+    ws.cell(ref["A_casco"], 3, f"=B{ref['Nt']}*PI()*{do_t}*B{ref['L']}")
+    ws.cell(ref["A_casco"], 3).number_format = "0.00"
+    ws.cell(ref["Rd"], 2, f"=(B{ref['Uc']}-B{ref['Ud']})/(B{ref['Uc']}*B{ref['Ud']})")
+    ws.cell(ref["Rd"], 2).number_format = "0.000000"
+    ws.cell(ref["Aprov"], 2, f"={r['Ns']}*C{ref['A_casco']}")
+    ws.cell(ref["Aprov"], 2).number_format = "0.00"
+    ws.cell(ref["Exc"], 2, f"=(B{ref['Aprov']}/B{ref['Areq']}-1)*100")
+    ws.cell(ref["Exc"], 2).number_format = "0.0"
 
     ws2 = wb.create_sheet("Iteraciones")
-    for i, linea in enumerate(log, start=1):
+    ws2.column_dimensions["A"].width = 160
+    ws2.cell(1, 1, "Registro de decisiones del agente").font = Font(name=F, bold=True, size=11)
+    for i, linea in enumerate(log, start=2):
         ws2.cell(i, 1, linea).font = Font(name=F, size=9)
 
     out = io.BytesIO()
@@ -329,8 +384,8 @@ def exportar_pdf_bytes(d, r, warns):
         ["Área Proporcionada", f"{r['A']:.2f}", "m²"],
         ["Coeficiente Uc", f"{r['Uc']:.1f}", "W/m²·K"],
         ["Coeficiente Ud", f"{r['Ud']:.1f}", "W/m²·K"],
-        ["Δp Carcasa / Admisible", f"{r['dPs']:.1f} / {r['dp_s_adm']:.1f}", "kPa"],
-        ["Δp Tubos / Admisible", f"{r['dPt']:.1f} / {r['dp_t_adm']:.1f}", "kPa"],
+        ["Δp Carcasa / Admisible", f"{r['dPs']/1e3:.1f} / {r['dp_s_adm']/1e3:.1f}", "kPa"],
+        ["Δp Tubos / Admisible", f"{r['dPt']/1e3:.1f} / {r['dp_t_adm']/1e3:.1f}", "kPa"],
         ["Estado General", "CUMPLE" if (r["ok_Rd"] and r["ok_dp"]) else "REVISAR", "-"]
     ]
 
@@ -554,6 +609,6 @@ if st.session_state.get('run_design', False):
     st.markdown("### Descarga de Documentación Oficial")
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
-        st.download_button("Descargar Hoja TEMA (.xlsx)", data=exportar_hoja_tema_bytes(datos, r, log, warns), file_name="hoja_TEMA.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Descargar Hoja TEMA en Excel (.xlsx)", data=exportar_hoja_tema_bytes(datos, r, log, warns), file_name="hoja_TEMA_completa.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_dl2:
         st.download_button("Descargar Memoria Técnica (.pdf)", data=exportar_pdf_bytes(datos, r, warns), file_name="memoria_calculo.pdf", mime="application/pdf")
