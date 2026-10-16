@@ -85,6 +85,18 @@ FLUIDOS_DB = {
     }
 }
 
+# --- BASE DE DATOS DE MATERIALES DE TUBOS ---
+MATERIALS_DB = {
+    "Acero al Carbono": 50.0,
+    "Acero Inoxidable 304/316": 16.3,
+    "Cuproníquel 90/10": 50.0,
+    "Cuproníquel 70/30": 29.0,
+    "Latón": 110.0,
+    "Cobre": 380.0,
+    "Titanio": 21.9,
+    "Personalizado (Manual)": 50.0
+}
+
 
 # --- MOTOR DE CÁLCULO TÉRMICO E HIDRÁULICO TEMA ---
 G = 9.81
@@ -405,6 +417,7 @@ def exportar_pdf_bytes(d, r, warns):
         ["Área Proporcionada", f"{r['A']:.2f}", "m²"],
         ["Coeficiente Uc", f"{r['Uc']:.1f}", "W/m²·K"],
         ["Coeficiente Ud", f"{r['Ud']:.1f}", "W/m²·K"],
+        ["Factor Ensuciamiento (Rd calc)", f"{r['Rd_calc']:.6f}", "m²·K/W"],
         ["Δp Carcasa / Admisible", f"{r['dPs']/1e3:.1f} / {r['dp_s_adm']/1e3:.1f}", "kPa"],
         ["Δp Tubos / Admisible", f"{r['dPt']/1e3:.1f} / {r['dp_t_adm']/1e3:.1f}", "kPa"],
         ["Estado General", "CUMPLE" if (r["ok_Rd"] and r["ok_dp"]) else "REVISAR", "-"]
@@ -439,7 +452,6 @@ def exportar_pdf_bytes(d, r, warns):
 st.title("Agente Inteligente de Diseño TEMA — Condensador")
 st.markdown("---")
 
-# Selector de Modo de Operación en la barra lateral superior
 modo_app = st.radio("Modo de Operación:", ["Diseño (Sizing - Calcular Área Óptima)", "Verificación (Rating - Evaluar Equipo Existente)"], horizontal=True)
 st.markdown("---")
 
@@ -510,6 +522,18 @@ with tab_in3:
     with c6: dp_adm_t = st.number_input("Pérdida de carga admisible tubos [kPa]", value=70.0, step=5.0)
 
 with tab_in4:
+    st.markdown("### Material y Conductividad Térmica de la Pared")
+    m1, m2 = st.columns(2)
+    with m1:
+        mat_sel = st.selectbox("Seleccionar material del tubo", list(MATERIALS_DB.keys()))
+    with m2:
+        if mat_sel == "Personalizado (Manual)":
+            k_wall = st.number_input("Conductividad térmica pared [W/m·K]", value=50.0)
+        else:
+            k_wall = MATERIALS_DB[mat_sel]
+            st.metric("Conductividad térmica ($k_{wall}$)", f"{k_wall} W/m·K", "Automático por norma")
+
+    st.markdown("---")
     if "Diseño" in modo_app:
         st.markdown("### Geometría y Criterios de Diseño (Modo Sizing)")
         c1, c2, c3 = st.columns(3)
@@ -520,13 +544,12 @@ with tab_in4:
         c4, c5, c6 = st.columns(3)
         with c4: arreglo = st.selectbox("Arreglo de tubos", ["Triangular (60°)", "Cuadrado (90°)"])
         with c5: pt = st.number_input("Paso entre tubos [mm]", value=23.81) / 1000.0
-        with c6: k_wall = st.number_input("Conductividad pared [W/m·K]", value=50.0)
+        with c6: ud_est_in = st.number_input("Coeficiente global estimado [W/m²K]", value=1500.0)
 
-        c7, c8, c9, c10 = st.columns(4)
+        c7, c8, c9 = st.columns(3)
         with c7: v_min = st.number_input("Velocidad mín. tubos [m/s]", value=1.0)
         with c8: v_max = st.number_input("Velocidad máx. tubos [m/s]", value=3.0)
-        with c9: ud_est_in = st.number_input("Coeficiente global estimado [W/m²K]", value=1500.0)
-        with c10: ft_min = st.number_input("Ft mínimo", value=0.75)
+        with c9: ft_min = st.number_input("Ft mínimo", value=0.75)
     else:
         st.markdown("### Geometría del Equipo Existente (Modo Rating / Verificación)")
         c1, c2, c3 = st.columns(3)
@@ -537,13 +560,12 @@ with tab_in4:
         c4, c5, c6 = st.columns(3)
         with c4: arreglo = st.selectbox("Arreglo de tubos", ["Triangular (60°)", "Cuadrado (90°)"])
         with c5: pt = st.number_input("Paso entre tubos [mm]", value=23.81) / 1000.0
-        with c6: k_wall = st.number_input("Conductividad pared [W/m·K]", value=50.0)
+        with c6: ds_val = st.number_input("Diámetro interno carcasa Ds [mm]", value=635.0) / 1000.0
 
-        c7, c8, c9, c10 = st.columns(4)
-        with c7: ds_val = st.number_input("Diámetro interno de carcasa Ds [mm]", value=635.0) / 1000.0
-        with c8: nt_val = st.number_input("Número total de tubos (Nt)", value=216, step=2)
-        with c9: n_pasos = st.selectbox("Pasos por tubos (n)", [2, 4, 6, 8], index=1)
-        with c10: b_val = st.number_input("Espaciado deflectores B [mm]", value=200.0) / 1000.0
+        c7, c8, c9 = st.columns(3)
+        with c7: nt_val = st.number_input("Número total de tubos (Nt)", value=216, step=2)
+        with c8: n_pasos = st.selectbox("Pasos por tubos (n)", [2, 4, 6, 8], index=1)
+        with c9: b_val = st.number_input("Espaciado deflectores B [mm]", value=200.0) / 1000.0
 
         ns_val = 1
         v_min, v_max, ft_min = 1.0, 3.0, 0.75
@@ -577,7 +599,6 @@ if st.session_state.get('run_design', False):
     if "Diseño" in modo_app:
         r, log, warns = disenar(datos)
     else:
-        # Modo Verificación Directa (Rating)
         preparar(datos, [])
         datos["DMLT"] = dmlt_contracorriente(t1_hot, t2_hot, t1_cold, t2_cold)
         datos["Ft"] = factor_ft(t1_hot, t2_hot, t1_cold, t2_cold, 1)
@@ -586,14 +607,15 @@ if st.session_state.get('run_design', False):
         r = evaluar(datos, g_ing)
         log = [
             f"Modo Verificación (Rating) ejecutado para el equipo {item_tag}.",
+            f"Material seleccionado: {mat_sel} (k = {k_wall} W/m·K)",
             f"Geometría fija: Ds = {ds_val*1000:.1f} mm, Nt = {nt_val}, L = {l_tube} m, Pasos = {n_pasos}",
             f"Carga térmica Q = {datos['Q']:.1f} kW, DMLT = {datos['DMLT']:.2f} K",
             f"Coeficiente Uc = {r['Uc']:.1f} W/m²K, Ud = {r['Ud']:.1f} W/m²K",
             f"Factor de ensuciamiento calculado (Rd) = {r['Rd_calc']:.6f} m²·K/W"
         ]
         warns = []
-        if r['Rd_calc'] < datos['Rd_req']:
-            warns.append("El equipo no alcanza el factor de ensuciamiento requerido (Rd_calc < Rd_req).")
+        if not r['ok_Rd']:
+            warns.append(f"El equipo no cumple con el factor de ensuciamiento requerido: Rd_calc ({r['Rd_calc']:.6f}) < Rd_req ({datos['Rd_req']:.6f}).")
         if not r['ok_dp']:
             warns.append("Se superan las caídas de presión admisibles en carcasa o tubos.")
 
@@ -606,8 +628,9 @@ if st.session_state.get('run_design', False):
         | Verificación | Resultado | Límite | Estado |
         | :--- | :--- | :--- | :--- |
         | **Caudal de agua calculado ($W_c$)** | {datos['fria']['Wc']:.1f} kg/h | Balance térmico | ℹ️ Automático |
+        | **Material / Conductividad pared** | {mat_sel} ({k_wall} W/m·K) | Especificación | ✅ Asignado |
         | **Factor de corrección Ft** | {datos['Ft']:.3f} | $\\ge {ft_min}$ | {'✅ Cumple' if datos['Ft'] >= ft_min else '⚠️ Revisar'} |
-        | **Factor de ensuciamiento** | {r['Rd_calc']:.6f} m²·K/W | $\\ge {rd_hot}$ | {'✅ Cumple' if r['ok_Rd'] else '❌ No cumple'} |
+        | **Factor de ensuciamiento ($Rd$)** | {r['Rd_calc']:.6f} m²·K/W | $\\ge {datos['Rd_req']:.6f}$ | {'✅ Cumple' if r['ok_Rd'] else '❌ No cumple'} |
         | **Velocidad del agua en tubos** | {r['v_t']:.2f} m/s | {v_min} a {v_max} m/s | {'✅ Cumple' if v_min <= r['v_t'] <= v_max else '⚠️ Revisar'} |
         | **Pérdida de carga en tubos** | {r['dPt']/1e3:.2f} kPa | $\\le {dp_adm_t}$ kPa | {'✅ Cumple' if r['dPt'] <= datos['fria']['dp_adm'] else '❌ Excede'} |
         | **Pérdida de carga en casco** | {r['dPs']/1e3:.2f} kPa | $\\le {dp_adm_s}$ kPa | {'✅ Cumple' if r['dPs'] <= datos['caliente']['dp_adm'] else '❌ Excede'} |
@@ -620,6 +643,7 @@ if st.session_state.get('run_design', False):
             st.markdown(f"""
             * **Carcasas en serie:** {r['Ns']}
             * **Tipo de equipo:** {tema_tipo}
+            * **Material de tubos:** {mat_sel}
             * **Diámetro interno del casco:** {r['Ds']*1000:.0f} mm
             * **Tubos:** {do_t*1000:.2f} mm
             * **Longitud de tubo:** {r['L']:.2f} m
@@ -655,7 +679,6 @@ if st.session_state.get('run_design', False):
         for l_log in log:
             st.text(l_log)
 
-    # Gráfico de sensibilidad interactivo (solo aplicable o adaptado)
     if "Diseño" in modo_app:
         st.markdown("---")
         st.markdown("### Análisis Gráfico de Sensibilidad")
@@ -681,7 +704,6 @@ if st.session_state.get('run_design', False):
         ax.grid(True, linestyle='--', alpha=0.3, color='#4a2b75')
         st.pyplot(fig)
 
-    # Descarga de reportes
     st.markdown("---")
     st.markdown("### Descarga de Documentación Oficial")
     col_dl1, col_dl2 = st.columns(2)
