@@ -157,7 +157,6 @@ def preparar(d, warns):
     h, c = d["caliente"], d["fria"]
     h["Tsat"] = h.get("T_sat") or h["T1"]
     Q = (h["Wh"] / 3600.0) * h["lambda"]
-    # Cálculo riguroso del caudal de agua de enfriamiento por balance térmico
     Wc_bal = Q / (c["cp"] * (c["t2"] - c["t1"])) * 3600.0
     c["Wc"] = Wc_bal
     d["Q"] = Q
@@ -436,15 +435,19 @@ def exportar_pdf_bytes(d, r, warns):
     return buffer
 
 
-# --- INTERFAZ PRINCIPAL CON PESTAÑAS IDÉNTICAS Y MEJORADAS ---
+# --- INTERFAZ PRINCIPAL CON PESTAÑAS Y MODO DE OPERACIÓN ---
 st.title("Agente Inteligente de Diseño TEMA — Condensador")
+st.markdown("---")
+
+# Selector de Modo de Operación en la barra lateral superior
+modo_app = st.radio("Modo de Operación:", ["Diseño (Sizing - Calcular Área Óptima)", "Verificación (Rating - Evaluar Equipo Existente)"], horizontal=True)
 st.markdown("---")
 
 tab_in1, tab_in2, tab_in3, tab_in4 = st.tabs([
     "Equipo", 
     "Vapor (lado casco)", 
     "Agua de enfriamiento (lado tubos)", 
-    "Tubos y diseño"
+    "Tubos y geometría"
 ])
 
 with tab_in1:
@@ -496,9 +499,7 @@ with tab_in3:
     
     c1, c2 = st.columns(2)
     with c1: fluido_c = st.text_input("Fluido refrigerante", value="Agua de enfriamiento")
-    with c2: 
-        # Espacio reservado / informativo
-        st.markdown("")
+    with c2: st.markdown("")
 
     c3, c4 = st.columns(2)
     with c3: t1_cold = st.number_input("Temperatura de entrada [°C]", value=25.0, step=0.5)
@@ -509,25 +510,47 @@ with tab_in3:
     with c6: dp_adm_t = st.number_input("Pérdida de carga admisible tubos [kPa]", value=70.0, step=5.0)
 
 with tab_in4:
-    st.markdown("### Geometría y Criterios de Diseño")
-    c1, c2, c3 = st.columns(3)
-    with c1: do_t = st.number_input("Diámetro externo tubo [mm]", value=19.05) / 1000.0
-    with c2: di_t = st.number_input("Diámetro interno tubo [mm]", value=15.75) / 1000.0
-    with c3: l_max = st.number_input("Longitud máxima del tubo [m]", value=3.66)
+    if "Diseño" in modo_app:
+        st.markdown("### Geometría y Criterios de Diseño (Modo Sizing)")
+        c1, c2, c3 = st.columns(3)
+        with c1: do_t = st.number_input("Diámetro externo tubo [mm]", value=19.05) / 1000.0
+        with c2: di_t = st.number_input("Diámetro interno tubo [mm]", value=15.75) / 1000.0
+        with c3: l_max = st.number_input("Longitud máxima del tubo [m]", value=3.66)
 
-    c4, c5, c6 = st.columns(3)
-    with c4: arreglo = st.selectbox("Arreglo de tubos", ["Triangular (60°)", "Cuadrado (90°)"])
-    with c5: pt = st.number_input("Paso entre tubos [mm]", value=23.81) / 1000.0
-    with c6: k_wall = st.number_input("Conductividad pared [W/m·K]", value=50.0)
+        c4, c5, c6 = st.columns(3)
+        with c4: arreglo = st.selectbox("Arreglo de tubos", ["Triangular (60°)", "Cuadrado (90°)"])
+        with c5: pt = st.number_input("Paso entre tubos [mm]", value=23.81) / 1000.0
+        with c6: k_wall = st.number_input("Conductividad pared [W/m·K]", value=50.0)
 
-    c7, c8, c9, c10 = st.columns(4)
-    with c7: v_min = st.number_input("Velocidad mín. tubos [m/s]", value=1.0)
-    with c8: v_max = st.number_input("Velocidad máx. tubos [m/s]", value=3.0)
-    with c9: ud_est_in = st.number_input("Coeficiente global estimado [W/m²K]", value=1500.0)
-    with c10: ft_min = st.number_input("Ft mínimo", value=0.75)
+        c7, c8, c9, c10 = st.columns(4)
+        with c7: v_min = st.number_input("Velocidad mín. tubos [m/s]", value=1.0)
+        with c8: v_max = st.number_input("Velocidad máx. tubos [m/s]", value=3.0)
+        with c9: ud_est_in = st.number_input("Coeficiente global estimado [W/m²K]", value=1500.0)
+        with c10: ft_min = st.number_input("Ft mínimo", value=0.75)
+    else:
+        st.markdown("### Geometría del Equipo Existente (Modo Rating / Verificación)")
+        c1, c2, c3 = st.columns(3)
+        with c1: do_t = st.number_input("Diámetro externo tubo [mm]", value=19.05) / 1000.0
+        with c2: di_t = st.number_input("Diámetro interno tubo [mm]", value=15.75) / 1000.0
+        with c3: l_tube = st.number_input("Longitud de tubo [m]", value=3.66)
+
+        c4, c5, c6 = st.columns(3)
+        with c4: arreglo = st.selectbox("Arreglo de tubos", ["Triangular (60°)", "Cuadrado (90°)"])
+        with c5: pt = st.number_input("Paso entre tubos [mm]", value=23.81) / 1000.0
+        with c6: k_wall = st.number_input("Conductividad pared [W/m·K]", value=50.0)
+
+        c7, c8, c9, c10 = st.columns(4)
+        with c7: ds_val = st.number_input("Diámetro interno de carcasa Ds [mm]", value=635.0) / 1000.0
+        with c8: nt_val = st.number_input("Número total de tubos (Nt)", value=216, step=2)
+        with c9: n_pasos = st.selectbox("Pasos por tubos (n)", [2, 4, 6, 8], index=1)
+        with c10: b_val = st.number_input("Espaciado deflectores B [mm]", value=200.0) / 1000.0
+
+        ns_val = 1
+        v_min, v_max, ft_min = 1.0, 3.0, 0.75
 
 st.markdown("---")
-if st.button("Calcular diseño óptimo"):
+btn_txt = "Calcular diseño óptimo" if "Diseño" in modo_app else "Verificar desempeño del equipo"
+if st.button(btn_txt):
     st.session_state['run_design'] = True
 
 if st.session_state.get('run_design', False):
@@ -544,13 +567,35 @@ if st.session_state.get('run_design', False):
             "dp_adm": dp_adm_t * 1000.0, "Rd": rd_cold
         },
         "geometria": {
-            "Do": do_t, "Di": di_t, "L_max": l_max, "arreglo": "triangular" if "Triangular" in arreglo else "cuadro",
+            "Do": do_t, "Di": di_t, "L_max": l_max if "Diseño" in modo_app else l_tube,
+            "arreglo": "triangular" if "Triangular" in arreglo else "cuadro",
             "Pt": pt, "k_pared": k_wall, "v_min": v_min, "v_max": v_max, "Ft_min": ft_min
         },
         "condensa_en": "casco"
     }
 
-    r, log, warns = disenar(datos)
+    if "Diseño" in modo_app:
+        r, log, warns = disenar(datos)
+    else:
+        # Modo Verificación Directa (Rating)
+        preparar(datos, [])
+        datos["DMLT"] = dmlt_contracorriente(t1_hot, t2_hot, t1_cold, t2_cold)
+        datos["Ft"] = factor_ft(t1_hot, t2_hot, t1_cold, t2_cold, 1)
+        datos["Ns"] = 1
+        g_ing = dict(Ns=1, Nt=nt_val, n=n_pasos, L=l_tube, Ds=ds_val, B=b_val)
+        r = evaluar(datos, g_ing)
+        log = [
+            f"Modo Verificación (Rating) ejecutado para el equipo {item_tag}.",
+            f"Geometría fija: Ds = {ds_val*1000:.1f} mm, Nt = {nt_val}, L = {l_tube} m, Pasos = {n_pasos}",
+            f"Carga térmica Q = {datos['Q']:.1f} kW, DMLT = {datos['DMLT']:.2f} K",
+            f"Coeficiente Uc = {r['Uc']:.1f} W/m²K, Ud = {r['Ud']:.1f} W/m²K",
+            f"Factor de ensuciamiento calculado (Rd) = {r['Rd_calc']:.6f} m²·K/W"
+        ]
+        warns = []
+        if r['Rd_calc'] < datos['Rd_req']:
+            warns.append("El equipo no alcanza el factor de ensuciamiento requerido (Rd_calc < Rd_req).")
+        if not r['ok_dp']:
+            warns.append("Se superan las caídas de presión admisibles en carcasa o tubos.")
 
     st.markdown("---")
     res_tab1, res_tab2, res_tab3, res_tab4 = st.tabs(["Verificaciones", "Detalle del equipo", "Observaciones", "Registro de iteraciones"])
@@ -610,30 +655,31 @@ if st.session_state.get('run_design', False):
         for l_log in log:
             st.text(l_log)
 
-    # Gráfico de sensibilidad interactivo
-    st.markdown("---")
-    st.markdown("### Análisis Gráfico de Sensibilidad")
-    wh_vals = np.linspace(wh * 0.5, wh * 1.5, 15)
-    areas = []
-    for w_t in wh_vals:
-        d_t = json.loads(json.dumps(datos))
-        d_t["caliente"]["Wh"] = w_t
-        try:
-            rt, _, _ = disenar(d_t)
-            areas.append(rt["A"])
-        except:
-            areas.append(np.nan)
+    # Gráfico de sensibilidad interactivo (solo aplicable o adaptado)
+    if "Diseño" in modo_app:
+        st.markdown("---")
+        st.markdown("### Análisis Gráfico de Sensibilidad")
+        wh_vals = np.linspace(wh * 0.5, wh * 1.5, 15)
+        areas = []
+        for w_t in wh_vals:
+            d_t = json.loads(json.dumps(datos))
+            d_t["caliente"]["Wh"] = w_t
+            try:
+                rt, _, _ = disenar(d_t)
+                areas.append(rt["A"])
+            except:
+                areas.append(np.nan)
 
-    fig, ax = plt.subplots(figsize=(10, 3.8))
-    fig.patch.set_facecolor('#1e1730')
-    ax.set_facecolor('#120f1d')
-    ax.plot(wh_vals, areas, marker='o', color='#ff6b6b', linewidth=2.5)
-    ax.set_xlabel('Caudal de Vapor [kg/h]', color='#e2d9ff')
-    ax.set_ylabel('Área Requerida [m²]', color='#e2d9ff')
-    ax.tick_params(colors='#bfaee3')
-    for spine in ax.spines.values(): spine.set_edgecolor('#332752')
-    ax.grid(True, linestyle='--', alpha=0.3, color='#4a2b75')
-    st.pyplot(fig)
+        fig, ax = plt.subplots(figsize=(10, 3.8))
+        fig.patch.set_facecolor('#1e1730')
+        ax.set_facecolor('#120f1d')
+        ax.plot(wh_vals, areas, marker='o', color='#ff6b6b', linewidth=2.5)
+        ax.set_xlabel('Caudal de Vapor [kg/h]', color='#e2d9ff')
+        ax.set_ylabel('Área Requerida [m²]', color='#e2d9ff')
+        ax.tick_params(colors='#bfaee3')
+        for spine in ax.spines.values(): spine.set_edgecolor('#332752')
+        ax.grid(True, linestyle='--', alpha=0.3, color='#4a2b75')
+        st.pyplot(fig)
 
     # Descarga de reportes
     st.markdown("---")
