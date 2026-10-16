@@ -1,0 +1,54 @@
+{
+  "identificacion": {
+    "item": "E-101",
+    "servicio": "Condensador de vapor de agua",
+    "cliente": "Práctica Integradora",
+    "tema": "BEM",
+    "orientacion": "Horizontal",
+    "material_tubos": "Acero al carbono",
+    "material_casco": "Acero al carbono"
+  },
+  "caliente": {
+    "fluido": "Vapor de agua saturado",
+    "Wh": 2.0,
+    "T1": 120.2,
+    "T2": 120.2,
+    "T_sat": 120.2,
+    "P_oper": 200000.0,
+    "lambda": 2201900.0,
+    "cp_vapor": 0.0,
+    "cp_liquido": 0.0,
+    "rho_liquido": 942.9,
+    "mu_liquido": 0.000232,
+    "k_liquido": 0.685,
+    "rho_vapor": 1.129,
+    "mu_vapor": 1.3e-05,
+    "dp_adm": 20000.0,
+    "Rd": 9e-05
+  },
+  "fria": {
+    "fluido": "Agua de enfriamiento",
+    "Wc": null,
+    "t1": 25.0,
+    "t2": 40.0,
+    "P_oper": 400000.0,
+    "cp": 4178.0,
+    "mu": 0.00076,
+    "k": 0.62,
+    "rho": 995.0,
+    "dp_adm": 70000.0,
+    "Rd": 0.00035
+  },
+  "geometria": {
+    "Do": 0.01905,
+    "Di": 0.01483,
+    "L_max": 4.88,
+    "arreglo": "triangular",
+    "Pt": 0.02381,
+    "k_pared": 50.0,
+    "Ud_est": 2000.0,
+    "v_min": 1.0,
+    "v_max": 3.0
+  },
+  "condensa_en": "casco"
+}
