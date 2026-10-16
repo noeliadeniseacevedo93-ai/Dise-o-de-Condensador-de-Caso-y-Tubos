@@ -6,6 +6,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 # --- DISEÑO Y ESTÉTICA (TONOS VIOLETA OSCURO) ---
 st.markdown("""
@@ -391,18 +395,71 @@ def exportar_hoja_tema_bytes(d, r, log, warns):
     return out
 
 
-# --- INTERFAZ PRINCIPAL: BOTONES ARRIBA Y PESTAÑAS CENTRALES ---
-st.title("💜 Agente de Diseño TEMA — Condensador de Casco y Tubos")
+def exportar_pdf_bytes(d, r, warns):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    elements = []
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#321c54'), alignment=1, spaceAfter=15)
+    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Heading2'], fontSize=12, textColor=colors.HexColor('#4a2b75'), spaceBefore=10, spaceAfter=6)
+    normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#222222'))
+    
+    elements.append(Paragraph("REPORTE TÉCNICO DE DISEÑO TEMA", title_style))
+    elements.append(Paragraph(f"<b>Equipo:</b> {d['identificacion']['item']} | <b>Servicio:</b> {d['identificacion']['servicio']}", subtitle_style))
+    elements.append(Spacer(1, 10))
+    
+    data = [
+        ["Parámetro de Desempeño", "Valor", "Unidad"],
+        ["Cascos en serie (Ns)", str(r["Ns"]), "-"],
+        ["Diámetro de Carcasa (Ds)", f"{r['Ds']*1000:.1f}", "mm"],
+        ["Número de Tubos (Nt)", str(r["Nt"]), "-"],
+        ["Longitud del Tubo (L)", f"{r['L']:.2f}", "m"],
+        ["Coeficiente Limpio (Uc)", f"{r['Uc']:.1f}", "W/m²·K"],
+        ["Coeficiente de Diseño (Ud)", f"{r['Ud']:.1f}", "W/m²·K"],
+        ["Área de Intercambio Proporcionada", f"{r['A']:.2f}", "m²"],
+        ["Δp Casco Calculada", f"{r['dPs']/1e3:.2f}", "kPa"],
+        ["Δp Tubos Calculada", f"{r['dPt']/1e3:.2f}", "kPa"],
+        ["Estado General", "CUMPLE" if (r["ok_Rd"] and r["ok_dp"]) else "NO CUMPLE", "-"]
+    ]
+    
+    t = Table(data, colWidths=[230, 150, 120])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#321c54')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 9),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#f4f2f8')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#d4bfff')),
+        ('FONTNAME', (0,1), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,1), (-1,-1), 9),
+    ]))
+    
+    elements.append(t)
+    
+    if warns:
+        elements.append(Spacer(1, 15))
+        elements.append(Paragraph("<b>AVISOS DE DISEÑO:</b>", subtitle_style))
+        for w in warns:
+            elements.append(Paragraph(f"• {w}", normal_style))
+            
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+
+# --- INTERFAZ PRINCIPAL ---
+st.title("Agente de Diseño TEMA — Condensador de Casco y Tubos")
 st.markdown("---")
 
-# BOTÓN PRINCIPAL ARRIBA DE TODO
 col_btn1, col_btn2 = st.columns([2, 1])
 with col_btn1:
     ejecutar = st.button("🚀 Ejecutar Diseño Óptimo y Generar Hoja TEMA")
 
 st.markdown("### 🎛️ Parámetros de Diseño y Proceso")
 
-# PESTAÑAS GRANDES EN EL CENTRO DE LA PANTALLA
 tab1, tab2, tab3, tab4 = st.tabs([
     "⚙️ Datos Operativos", 
     "🔥 Datos de Vapor (Caliente)", 
@@ -418,7 +475,6 @@ with tab1:
         servicio_desc = st.text_input("Servicio", value="Condensador de vapor de agua")
     with c2:
         tema_tipo = st.text_input("Tipo TEMA", value="BEM")
-        ud_est_input = st.number_input("Ud estimada inicial [W/m²·K]", value=2000.0, step=100.0)
 
 with tab2:
     st.markdown("#### Condiciones del Vapor y Propiedades")
@@ -461,7 +517,6 @@ with tab4:
         pt_pitch = st.number_input("Paso de tubos (Pt) [m]", value=0.02381, format="%.5f")
         k_wall = st.number_input("Conductividad pared tubo [W/m·K]", value=50.0)
 
-# EJECUCIÓN DEL DISEÑO
 if ejecutar:
     st.session_state['run_design'] = True
 
@@ -470,7 +525,7 @@ if st.session_state.get('run_design', False):
         "identificacion": {"item": item_tag, "servicio": servicio_desc, "cliente": "Práctica Integradora", "tema": tema_tipo, "orientacion": "Horizontal", "material_tubos": "Acero al carbono", "material_casco": "Acero al carbono"},
         "caliente": {"fluido": "Vapor de agua saturado", "Wh": wh, "T1": t1_hot, "T2": t2_hot, "T_sat": tsat, "P_oper": 200000.0, "lambda": lam, "cp_vapor": 0.0, "cp_liquido": 0.0, "rho_liquido": rho_liq, "mu_liquido": mu_liq, "k_liquido": k_liq, "rho_vapor": rho_vap, "mu_vapor": mu_vap, "dp_adm": 20000.0, "Rd": rd_hot},
         "fria": {"fluido": "Agua de enfriamiento", "Wc": None, "t1": t1_cold, "t2": t2_cold, "P_oper": 400000.0, "cp": cp_c, "mu": mu_c, "k": k_c, "rho": rho_c, "dp_adm": 70000.0, "Rd": rd_cold},
-        "geometria": {"Do": do_tube, "Di": di_tube, "L_max": l_max, "arreglo": "triangular", "Pt": pt_pitch, "k_pared": k_wall, "Ud_est": ud_est_input, "v_min": 1.0, "v_max": 3.0},
+        "geometria": {"Do": do_tube, "Di": di_tube, "L_max": l_max, "arreglo": "triangular", "Pt": pt_pitch, "k_pared": k_wall, "Ud_est": 2000.0, "v_min": 1.0, "v_max": 3.0},
         "condensa_en": "casco"
     }
     
@@ -497,7 +552,6 @@ if st.session_state.get('run_design', False):
         for w in warns:
             st.warning(w)
 
-    # GRÁFICO DE TEMPERATURAS
     st.markdown("---")
     st.header("📈 Perfil de Temperaturas del Condensador")
     
@@ -522,7 +576,6 @@ if st.session_state.get('run_design', False):
     
     st.pyplot(fig)
 
-    # GRÁFICO INTERACTIVO DE SENSIBILIDAD (NUEVO)
     st.markdown("---")
     st.header("📉 Gráfico Interactivo de Sensibilidad")
     st.markdown("Analizá cómo varía el **Área de Intercambio requerida** al modificar el caudal de vapor másico ($Wh$).")
@@ -554,21 +607,32 @@ if st.session_state.get('run_design', False):
     
     st.pyplot(fig2)
 
-    # REGISTRO DE ITERACIONES
     st.markdown("---")
     st.header("📝 Registro de Iteraciones del Agente")
     with st.expander("Ver log paso a paso de la búsqueda geométrica", expanded=False):
         for linea in log:
             st.text(linea)
 
-    # HOJA DE ESPECIFICACIONES ABAJO PARA DESCARGAR
     st.markdown("---")
-    st.header("📥 Descarga de la Hoja de Especificaciones")
-    excel_file = exportar_hoja_tema_bytes(datos, r, log, warns)
+    st.header("📥 Descarga de Reportes y Especificaciones")
     
-    st.download_button(
-        label="📥 Descargar Hoja TEMA Actualizada (.xlsx)",
-        data=excel_file,
-        file_name="hoja_TEMA_actualizada.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    col_dl1, col_dl2 = st.columns(2)
+    
+    excel_file = exportar_hoja_tema_bytes(datos, r, log, warns)
+    pdf_file = exportar_pdf_bytes(datos, r, warns)
+    
+    with col_dl1:
+        st.download_button(
+            label="📥 Descargar Hoja TEMA en Excel (.xlsx)",
+            data=excel_file,
+            file_name="hoja_TEMA_actualizada.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+    with col_dl2:
+        st.download_button(
+            label="📄 Descargar Reporte Técnico en PDF",
+            data=pdf_file,
+            file_name="reporte_condensador.pdf",
+            mime="application/pdf"
+        )
