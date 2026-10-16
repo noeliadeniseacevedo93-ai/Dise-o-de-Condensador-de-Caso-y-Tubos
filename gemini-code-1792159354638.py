@@ -199,4 +199,4 @@ def buscar_geometria(d, A_req, Ns, log):
     Do, Pt, arr, rear = geo["Do"], geo["Pt"], geo["arreglo"], d["rear"]
     h = d["caliente"]
     isoterma = abs(h["T1"] - h["T2"]) < 1e-9
-    n_opts = [1, 2, 4, 6, 8] if (isoterma and rear
+    n_opts = [1, 2, 4, 6, 8] if (isoterma and rear)
