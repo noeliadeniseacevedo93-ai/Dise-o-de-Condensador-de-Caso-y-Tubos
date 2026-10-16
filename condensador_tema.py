@@ -13,6 +13,7 @@ Uso:
     python condensador_tema.py                      # corre el caso ejemplo
     python condensador_tema.py --ejemplo datos.json # guarda un JSON de ejemplo para editar
     python condensador_tema.py --entrada datos.json --salida hoja_TEMA.xlsx
+    python condensador_tema.py --entrada datos.json --editar  # abre los datos en $EDITOR para modificarlos
 """
 import argparse
 import json
@@ -560,6 +561,7 @@ def main():
     ap.add_argument("--entrada", help="JSON con los datos de proceso (Fase I)")
     ap.add_argument("--salida", default="hoja_TEMA.xlsx")
     ap.add_argument("--ejemplo", help="Guarda un JSON de ejemplo en esa ruta y termina")
+    ap.add_argument("--editar", action="store_true", help="Abre los datos de entrada en $EDITOR para poder modificarlos antes de ejecutar")
     a = ap.parse_args()
 
     if a.ejemplo:
@@ -573,6 +575,24 @@ def main():
             d = json.load(f)
     else:
         d = json.loads(json.dumps(EJEMPLO))
+
+    # Si se pide editar, volcar los datos a un archivo temporal y abrir el editor del usuario
+    if a.editar:
+        import tempfile, os, subprocess
+        fd, tmp = tempfile.mkstemp(suffix='.json')
+        os.close(fd)
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(d, f, indent=2, ensure_ascii=False)
+        editor = os.environ.get('EDITOR', 'nano')
+        try:
+            subprocess.call([editor, tmp])
+            with open(tmp, encoding='utf-8') as f:
+                d = json.load(f)
+        finally:
+            try:
+                os.remove(tmp)
+            except Exception:
+                pass
 
     r, log, warns = disenar(d)
     print("\n".join(log))
