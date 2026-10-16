@@ -8,27 +8,20 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 # --- DISEÑO Y ESTÉTICA (TONOS VIOLETA OSCURO) ---
 st.markdown("""
     <style>
-    /* Fondo general de la aplicación */
     .stApp {
         background-color: #120f1d;
         color: #e6e3f8;
     }
-    
-    /* Barra lateral en violeta oscuro profundo */
     [data-testid="stSidebar"] {
         background-color: #1a1528;
         border-right: 1px solid #2d2445;
     }
-    
-    /* Textos y títulos en la barra lateral y principal */
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
         color: #d4bfff !important;
     }
     h1, h2, h3 {
         color: #e2d9ff !important;
     }
-    
-    /* Estilo de los botones principales */
     .stButton>button {
         background: linear-gradient(135deg, #6b3fa0, #4a2575);
         color: white;
@@ -44,8 +37,6 @@ st.markdown("""
         background: linear-gradient(135deg, #7d4bc4, #5a2f8a);
         box-shadow: 0 6px 15px rgba(125, 75, 196, 0.6);
     }
-    
-    /* Cajas de métricas y resultados */
     [data-testid="stMetric"] {
         background-color: #1e1730;
         border: 1px solid #332752;
@@ -59,8 +50,6 @@ st.markdown("""
     [data-testid="stMetricValue"] {
         color: #f3efff !important;
     }
-    
-    /* Botón de descarga de Excel */
     .stDownloadButton>button {
         background: linear-gradient(135deg, #382159, #231338);
         color: #e2d9ff;
@@ -416,6 +405,7 @@ with st.sidebar.expander("⚙️ 1. Datos Operativos", expanded=True):
     item_tag = st.text_input("Ítem / Tag del equipo", value="E-101")
     servicio_desc = st.text_input("Servicio", value="Condensador de vapor de agua")
     tema_tipo = st.text_input("Tipo TEMA", value="BEM")
+    ud_est_input = st.number_input("Ud estimada inicial [W/m²·K]", value=2000.0, step=100.0)
 
 # 2. DATOS DE VAPOR (CALIENTE)
 with st.sidebar.expander("🔥 2. Datos de Vapor", expanded=True):
@@ -424,6 +414,7 @@ with st.sidebar.expander("🔥 2. Datos de Vapor", expanded=True):
     t2_hot = st.number_input("Temp. salida vapor [°C]", value=120.2, step=0.1)
     tsat = st.number_input("Temperatura de condensación / sat. [°C]", value=120.2, step=0.1)
     lam = st.number_input("Calor latente (lambda) [J/kg]", value=2201900.0, step=100.0)
+    rd_hot = st.number_input("Factor de ensuciamiento lado caliente (Rd) [m²·K/W]", value=0.00009, format="%.6f")
     
     st.markdown("##### Propiedades del Vapor / Líquido")
     rho_liq = st.number_input("Densidad líquido [kg/m³]", value=942.9)
@@ -436,6 +427,7 @@ with st.sidebar.expander("🔥 2. Datos de Vapor", expanded=True):
 with st.sidebar.expander("💧 3. Datos de Líquido Frío", expanded=True):
     t1_cold = st.number_input("Temp. entrada agua fría (t1) [°C]", value=25.0, step=0.1)
     t2_cold = st.number_input("Temp. salida agua fría (t2) [°C]", value=40.0, step=0.1)
+    rd_cold = st.number_input("Factor de ensuciamiento lado frío (Rd) [m²·K/W]", value=0.00035, format="%.6f")
     cp_c = st.number_input("Calor específico líquido frío [J/kg·K]", value=4178.0)
     rho_c = st.number_input("Densidad líquido frío [kg/m³]", value=995.0)
     mu_c = st.number_input("Viscosidad líquido frío [Pa·s]", value=0.00076, format="%.5f")
@@ -454,9 +446,9 @@ st.markdown("---")
 if st.button("🚀 Ejecutar Diseño Óptimo y Generar Hoja TEMA"):
     datos = {
         "identificacion": {"item": item_tag, "servicio": servicio_desc, "cliente": "Práctica Integradora", "tema": tema_tipo, "orientacion": "Horizontal", "material_tubos": "Acero al carbono", "material_casco": "Acero al carbono"},
-        "caliente": {"fluido": "Vapor de agua saturado", "Wh": wh, "T1": t1_hot, "T2": t2_hot, "T_sat": tsat, "P_oper": 200000.0, "lambda": lam, "cp_vapor": 0.0, "cp_liquido": 0.0, "rho_liquido": rho_liq, "mu_liquido": mu_liq, "k_liquido": k_liq, "rho_vapor": rho_vap, "mu_vapor": mu_vap, "dp_adm": 20000.0, "Rd": 9e-05},
-        "fria": {"fluido": "Agua de enfriamiento", "Wc": None, "t1": t1_cold, "t2": t2_cold, "P_oper": 400000.0, "cp": cp_c, "mu": mu_c, "k": k_c, "rho": rho_c, "dp_adm": 70000.0, "Rd": 0.00035},
-        "geometria": {"Do": do_tube, "Di": di_tube, "L_max": l_max, "arreglo": "triangular", "Pt": pt_pitch, "k_pared": k_wall, "Ud_est": 2000.0, "v_min": 1.0, "v_max": 3.0},
+        "caliente": {"fluido": "Vapor de agua saturado", "Wh": wh, "T1": t1_hot, "T2": t2_hot, "T_sat": tsat, "P_oper": 200000.0, "lambda": lam, "cp_vapor": 0.0, "cp_liquido": 0.0, "rho_liquido": rho_liq, "mu_liquido": mu_liq, "k_liquido": k_liq, "rho_vapor": rho_vap, "mu_vapor": mu_vap, "dp_adm": 20000.0, "Rd": rd_hot},
+        "fria": {"fluido": "Agua de enfriamiento", "Wc": None, "t1": t1_cold, "t2": t2_cold, "P_oper": 400000.0, "cp": cp_c, "mu": mu_c, "k": k_c, "rho": rho_c, "dp_adm": 70000.0, "Rd": rd_cold},
+        "geometria": {"Do": do_tube, "Di": di_tube, "L_max": l_max, "arreglo": "triangular", "Pt": pt_pitch, "k_pared": k_wall, "Ud_est": ud_est_input, "v_min": 1.0, "v_max": 3.0},
         "condensa_en": "casco"
     }
     
