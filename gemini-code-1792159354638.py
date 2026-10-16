@@ -157,6 +157,7 @@ def preparar(d, warns):
     h, c = d["caliente"], d["fria"]
     h["Tsat"] = h.get("T_sat") or h["T1"]
     Q = (h["Wh"] / 3600.0) * h["lambda"]
+    # Cálculo riguroso del caudal de agua de enfriamiento por balance térmico
     Wc_bal = Q / (c["cp"] * (c["t2"] - c["t1"])) * 3600.0
     c["Wc"] = Wc_bal
     d["Q"] = Q
@@ -247,6 +248,7 @@ def disenar(d):
     Ud_est = 1500.0
     A_prov = (d["Q"] * 1000.0) / (Ud_est * d["DMLT"] * Ft)
     log.append(f"Balance térmico: Q = {d['Q']:.1f} kW, DMLT = {d['DMLT']:.2f} K, Ft = {Ft:.3f}")
+    log.append(f"Caudal de agua calculado (Wc): {c['Wc']:.2f} kg/h")
     
     r = buscar_geometria(d, A_prov, Ns, log)
     if r is None:
@@ -456,7 +458,6 @@ with tab_in1:
 with tab_in2:
     st.markdown("### Condiciones del Vapor (Lado Casco)")
     
-    # Selector de compuesto predefinido
     compuesto_sel = st.selectbox("Seleccionar compuesto / fluido condensante predefinido:", list(FLUIDOS_DB.keys()))
     props_def = FLUIDOS_DB[compuesto_sel]
 
@@ -491,18 +492,21 @@ with tab_in2:
 
 with tab_in3:
     st.markdown("### Agua de Enfriamiento (Lado Tubos)")
+    st.info("💡 El caudal de agua fría se calcula automáticamente por balance térmico en función de las temperaturas de entrada y salida.")
+    
     c1, c2 = st.columns(2)
     with c1: fluido_c = st.text_input("Fluido refrigerante", value="Agua de enfriamiento")
-    with c2: modo_c = st.radio("¿Qué dato conocés?", ["Conozco la temperatura de salida", "Conozco el caudal"])
+    with c2: 
+        # Espacio reservado / informativo
+        st.markdown("")
 
-    c3, c4, c5 = st.columns(3)
+    c3, c4 = st.columns(2)
     with c3: t1_cold = st.number_input("Temperatura de entrada [°C]", value=25.0, step=0.5)
     with c4: t2_cold = st.number_input("Temperatura de salida [°C]", value=45.0, step=0.5)
-    with c5: wc_cold = st.number_input("Caudal [kg/h]", value=18000.0, step=100.0)
 
-    c6, c7 = st.columns(2)
-    with c6: rd_cold = st.number_input("Factor de ensuciamiento tubos [m²·K/W]", value=0.000176, format="%.6f")
-    with c7: dp_adm_t = st.number_input("Pérdida de carga admisible tubos [kPa]", value=70.0, step=5.0)
+    c5, c6 = st.columns(2)
+    with c5: rd_cold = st.number_input("Factor de ensuciamiento tubos [m²·K/W]", value=0.000176, format="%.6f")
+    with c6: dp_adm_t = st.number_input("Pérdida de carga admisible tubos [kPa]", value=70.0, step=5.0)
 
 with tab_in4:
     st.markdown("### Geometría y Criterios de Diseño")
@@ -556,6 +560,7 @@ if st.session_state.get('run_design', False):
         st.markdown(f"""
         | Verificación | Resultado | Límite | Estado |
         | :--- | :--- | :--- | :--- |
+        | **Caudal de agua calculado ($W_c$)** | {datos['fria']['Wc']:.1f} kg/h | Balance térmico | ℹ️ Automático |
         | **Factor de corrección Ft** | {datos['Ft']:.3f} | $\\ge {ft_min}$ | {'✅ Cumple' if datos['Ft'] >= ft_min else '⚠️ Revisar'} |
         | **Factor de ensuciamiento** | {r['Rd_calc']:.6f} m²·K/W | $\\ge {rd_hot}$ | {'✅ Cumple' if r['ok_Rd'] else '❌ No cumple'} |
         | **Velocidad del agua en tubos** | {r['v_t']:.2f} m/s | {v_min} a {v_max} m/s | {'✅ Cumple' if v_min <= r['v_t'] <= v_max else '⚠️ Revisar'} |
@@ -579,6 +584,7 @@ if st.session_state.get('run_design', False):
             """)
         with col_d2:
             st.markdown(f"""
+            * **Caudal de agua calculado ($W_c$):** {datos['fria']['Wc']:.1f} kg/h
             * **Coeficiente del vapor ($h_o$):** {r['ho']:.1f} W/m²·K
             * **Coeficiente del agua ($h_i$):** {r['hi']:.1f} W/m²·K
             * **DMLT $\\times$ Ft:** {datos['DMLT'] * datos['Ft']:.1f} K
